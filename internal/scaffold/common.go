@@ -24,32 +24,59 @@ package common;
 
 option go_package = "%s/proto/common";
 
-// Pagination request
-message PaginationRequest {
-  int32 page = 1;
-  int32 page_size = 2;
-  string sort_by = 3;
-  bool descending = 4;
+// ============= Filter Operators =============
+enum FilterOperator {
+  EQUAL = 0;              // =
+  NOT_EQUAL = 1;          // !=
+  GREATER_THAN = 2;       // >
+  GREATER_THAN_EQUAL = 3; // >=
+  LESS_THAN = 4;          // <
+  LESS_THAN_EQUAL = 5;    // <=
+  LIKE = 6;               // LIKE %%value%%
+  IN = 7;                 // IN (val1, val2, ...)
+  NOT_IN = 8;             // NOT IN
+  IS_NULL = 9;            // IS NULL
+  IS_NOT_NULL = 10;       // IS NOT NULL
+  BETWEEN = 11;           // BETWEEN val1 AND val2
 }
 
-// Filter condition
-message FilterCondition {
-  string field = 1;
-  string operator = 2; // eq, ne, gt, gte, lt, lte, like, in
-  string value = 3;
+// ============= Logical Conditions =============
+enum LogicalCondition {
+  AND = 0;
+  OR = 1;
 }
 
-// Filter (can be condition or group)
-message Filter {
-  oneof filter {
-    FilterCondition condition = 1;
+// ============= Filter Criteria (Nested Support) =============
+message FilterCriteria {
+  oneof criteria {
+    FilterCondition condition = 1;  // Single condition
+    FilterGroup group = 2;           // Nested group of conditions
   }
 }
 
-// Search request with pagination and filters
+message FilterCondition {
+  string field = 1;              // field name: "title", "status", "created_at"
+  FilterOperator operator = 2;   // comparison operator
+  repeated string values = 3;    // value(s) to compare
+}
+
+message FilterGroup {
+  LogicalCondition logic = 1;           // AND/OR for this group
+  repeated FilterCriteria filters = 2;  // Nested filters (can be conditions or groups)
+}
+
+// ============= Pagination =============
+message Pagination {
+  int32 page = 1;           // page number (starting from 1)
+  int32 page_size = 2;      // number of items per page
+  string sort_by = 3;       // field to sort by
+  bool descending = 4;      // sort direction (false = ASC, true = DESC)
+}
+
+// ============= Generic Search Request =============
 message SearchRequest {
-  PaginationRequest pagination = 1;
-  repeated Filter filters = 2;
+  Pagination pagination = 1;
+  repeated FilterCriteria filters = 2;
 }
 `, modulePath)
 
