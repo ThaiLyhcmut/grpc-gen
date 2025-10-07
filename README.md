@@ -30,7 +30,7 @@ sudo mv grpc-gen /usr/local/bin/
 Or install directly from source:
 
 ```bash
-go install github.com/thaily/grpc-generator@latest
+go install github.com/thailyhcmut/grpc-gen@latest
 ```
 
 ## Quick Start
