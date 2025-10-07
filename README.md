@@ -17,8 +17,8 @@ A CLI tool to quickly scaffold gRPC microservices with full CRUD operations, sim
 
 ```bash
 # Clone the repository
-git clone https://github.com/thaily/grpc-generator.git
-cd grpc-generator
+git clone https://github.com/thailyhcmut/grpc-gen.git
+cd grpc-gen
 
 # Build the tool
 go build -o grpc-gen .
