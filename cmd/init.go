@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/thaily/grpc-generator/internal/scaffold"
+	"github.com/thailyhcmut/grpc-gen/internal/scaffold"
 )
 
 var initCmd = &cobra.Command{

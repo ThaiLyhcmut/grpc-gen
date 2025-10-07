@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/thaily/grpc-generator/cmd"
+	"github.com/thailyhcmut/grpc-gen/cmd"
 )
 
 func main() {
