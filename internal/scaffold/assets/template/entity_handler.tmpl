@@ -1,0 +1,13 @@
+package handler
+
+import (
+	"context"
+	pb "{{.PackagePath}}"
+)
+
+{{range .Methods}}
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	// TODO: Implement {{.Name}}
+	return &pb.{{.ResponseType}}{}, nil
+}
+{{end}}

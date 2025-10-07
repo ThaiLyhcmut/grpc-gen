@@ -1,0 +1,359 @@
+package handler
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+	pb "{{.PackagePath}}"
+	"thaily/src/pkg/helper"
+	"thaily/src/pkg/logger"
+
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+{{range .Methods}}
+{{if eq .Name (printf "Create%s" $.EntityName)}}
+// Create{{$.EntityName}} creates a new {{$.EntityName}} record
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	// Validate required fields (only string types)
+	{{range $.RequiredFields}}{{if eq .Type "string"}}if req.{{.GoName}} == "" {
+		return nil, status.Error(codes.InvalidArgument, "{{.ProtoName}} is required")
+	}
+	{{end}}{{end}}
+	// Generate UUID
+	id := uuid.New().String()
+
+	// Prepare fields
+	{{range $.OptionalFields}}{{if not .IsEnum}}{{.GoName}} := {{.DefaultValue}}
+	if req.{{.GoName}} != nil {
+		{{.GoName}} = *req.{{.GoName}}
+	}
+	{{end}}{{end}}
+	{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} enum to string
+	{{.GoName}}Value := pb.{{.EnumType}}_{{.DefaultValue}}
+	{{if .IsOptional}}if req.{{.GoName}} != nil {
+		{{.GoName}}Value = *req.{{.GoName}}
+	}{{else}}
+	{{.GoName}}Value = req.{{.GoName}}{{end}}
+	{{.GoName}}Str := "{{.DefaultDBValue}}"
+	switch {{.GoName}}Value {
+	{{range .EnumValues}}case pb.{{$field.EnumType}}_{{.}}:
+		{{$field.GoName}}Str = "{{. | lower}}"
+	{{end}}}
+	{{end}}
+	// Insert into database
+	query := `
+		INSERT INTO {{$.TableName}} (id, {{$.CreateFieldsSQL}}, created_by, created_at, updated_at)
+		VALUES (?, {{$.CreatePlaceholders}}, ?, NOW(), NOW())
+	`
+
+	_, err := h.execQuery(ctx, query,
+		id,
+		{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
+		{{else if .IsOptional}}{{.GoName}},
+		{{else}}req.{{.GoName}},
+		{{end}}{{end}}req.CreatedBy,
+	)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			return nil, status.Error(codes.AlreadyExists, "{{$.EntityName | lower}} already exists")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to create {{$.EntityName | lower}}: %v", err)
+	}
+
+	result, err := h.Get{{$.EntityName}}(ctx, &pb.Get{{$.EntityName}}Request{Id: id})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get {{$.EntityName | lower}}")
+	}
+	return &pb.{{.ResponseType}}{
+		{{$.EntityName}}: result.Get{{$.EntityName}}(),
+	}, nil
+}
+{{end}}
+
+{{if eq .Name (printf "Get%s" $.EntityName)}}
+// Get{{$.EntityName}} retrieves a {{$.EntityName}} by ID
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	query := `
+		SELECT {{$.SelectFieldsSQL}}
+		FROM {{$.TableName}}
+		WHERE id = ?
+	`
+
+	var entity pb.{{$.EntityName}}
+	var createdAt, updatedAt sql.NullTime
+	var updatedBy sql.NullString
+	{{range $.EnumFields}}var {{.GoName}}Str string
+	{{end}}
+	err := h.queryRow(ctx, query, req.Id).Scan(
+		{{range $.ScanFields}}&{{.}},
+		{{end}}&createdAt,
+		&updatedAt,
+		&entity.CreatedBy,
+		&updatedBy,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, status.Error(codes.NotFound, "{{$.EntityName | lower}} not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get {{$.EntityName | lower}}: %v", err)
+	}
+
+	{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} string to enum
+	switch {{.GoName}}Str {
+	{{range .EnumValues}}case "{{. | lower}}":
+		entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{.}}
+	{{end}}default:
+		entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{$field.DefaultValue}}
+	}
+	{{end}}
+	if createdAt.Valid {
+		entity.CreatedAt = timestamppb.New(createdAt.Time)
+	}
+	if updatedAt.Valid {
+		entity.UpdatedAt = timestamppb.New(updatedAt.Time)
+	}
+	if updatedBy.Valid {
+		entity.UpdatedBy = updatedBy.String
+	}
+
+	return &pb.{{.ResponseType}}{
+		{{$.EntityName}}: &entity,
+	}, nil
+}
+{{end}}
+
+{{if eq .Name (printf "Update%s" $.EntityName)}}
+// Update{{$.EntityName}} updates an existing {{$.EntityName}}
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	// Build dynamic update query
+	updateFields := []string{}
+	args := []interface{}{}
+
+	{{range $.UpdateFields}}{{$field := .}}if req.{{.GoName}} != nil {
+		updateFields = append(updateFields, "{{.DBField}} = ?")
+		{{if eq .IsEnum true}}{{.GoName}}Str := "{{.DefaultDBValue}}"
+		switch *req.{{.GoName}} {
+		{{range .EnumValues}}case pb.{{$field.EnumType}}_{{.}}:
+			{{$field.GoName}}Str = "{{. | lower}}"
+		{{end}}}
+		args = append(args, {{.GoName}}Str)
+		{{else}}args = append(args, *req.{{.GoName}})
+		{{end}}
+	}
+	{{end}}
+	if len(updateFields) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no fields to update")
+	}
+
+	// Add updated_by and updated_at
+	updateFields = append(updateFields, "updated_by = ?")
+	args = append(args, req.UpdatedBy)
+	updateFields = append(updateFields, "updated_at = NOW()")
+
+	// Add id as last parameter
+	args = append(args, req.Id)
+
+	query := fmt.Sprintf(`
+		UPDATE {{$.TableName}}
+		SET %s
+		WHERE id = ?
+	`, strings.Join(updateFields, ", "))
+
+	_, err := h.execQuery(ctx, query, args...)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update {{$.EntityName | lower}}: %v", err)
+	}
+
+	result, err := h.Get{{$.EntityName}}(ctx, &pb.Get{{$.EntityName}}Request{Id: req.Id})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get {{$.EntityName | lower}}")
+	}
+	return &pb.{{.ResponseType}}{
+		{{$.EntityName}}: result.Get{{$.EntityName}}(),
+	}, nil
+}
+{{end}}
+
+{{if eq .Name (printf "Delete%s" $.EntityName)}}
+// Delete{{$.EntityName}} deletes a {{$.EntityName}} by ID
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	query := `DELETE FROM {{$.TableName}} WHERE id = ?`
+
+	result, err := h.execQuery(ctx, query, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete {{$.EntityName | lower}}: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get rows affected: %v", err)
+	}
+
+	if rowsAffected == 0 {
+		return nil, status.Error(codes.NotFound, "{{$.EntityName | lower}} not found")
+	}
+
+	return &pb.{{.ResponseType}}{
+		Success: true,
+	}, nil
+}
+{{end}}
+
+{{if hasPrefix .Name "List"}}
+// {{.Name}} lists {{$.EntityName}}s with pagination and filtering
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	// Default pagination
+	page := int32(1)
+	pageSize := int32(10)
+	sortBy := "created_at"
+	descending := true
+	if req.Search != nil && req.Search.Pagination != nil {
+		if req.Search.Pagination.Page > 0 {
+			page = req.Search.Pagination.Page
+		}
+		if req.Search.Pagination.PageSize > 0 {
+			pageSize = req.Search.Pagination.PageSize
+		}
+		if req.Search.Pagination.SortBy != "" {
+			sortBy = req.Search.Pagination.SortBy
+		}
+		descending = req.Search.Pagination.Descending
+	}
+
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Build WHERE clause from filters
+	whereClause := ""
+	args := []interface{}{}
+	whiteMap := map[string]bool{
+		{{range $.FilterableFields}}"{{.}}": true,
+		{{end}}
+	}
+	if req.Search != nil && len(req.Search.Filters) > 0 {
+		whereConditions := []string{}
+		for _, filter := range req.Search.Filters {
+			if filter.GetCondition() != nil {
+				condition := filter.GetCondition()
+				if _, ok := whiteMap[condition.Field]; !ok {
+					continue
+				}
+				whereConditions = append(whereConditions, helper.BuildFilterCondition(condition, &args))
+			}
+		}
+		if len(whereConditions) > 0 {
+			whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
+		}
+	}
+
+	// Build ORDER BY clause
+	sortDirection := "ASC"
+	if descending {
+		sortDirection = "DESC"
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM {{$.TableName}} %s", whereClause)
+	var total int32
+	err := h.queryRow(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to count {{$.EntityName | lower}}s: %v", err)
+	}
+
+	// Get entities with pagination
+	args = append(args, pageSize, offset)
+	query := fmt.Sprintf(`
+		SELECT {{$.SelectFieldsSQL}}
+		FROM {{$.TableName}}
+		%s
+		ORDER BY %s %s
+		LIMIT ? OFFSET ?
+	`, whereClause, sortBy, sortDirection)
+
+	rows, err := h.query(ctx, query, args...)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list {{$.EntityName | lower}}s: %v", err)
+	}
+	defer rows.Close()
+
+	entities := []*pb.{{$.EntityName}}{}
+	for rows.Next() {
+		var entity pb.{{$.EntityName}}
+		var createdAt, updatedAt sql.NullTime
+		var updatedBy sql.NullString
+		{{range $.EnumFields}}var {{.GoName}}Str string
+		{{end}}
+		err := rows.Scan(
+			{{range $.ScanFields}}&{{.}},
+			{{end}}&createdAt,
+			&updatedAt,
+			&entity.CreatedBy,
+			&updatedBy,
+		)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to scan {{$.EntityName | lower}}: %v", err)
+		}
+
+		{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} string to enum
+		switch {{.GoName}}Str {
+		{{range .EnumValues}}case "{{. | lower}}":
+			entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{.}}
+		{{end}}default:
+			entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{$field.DefaultValue}}
+		}
+		{{end}}
+		if createdAt.Valid {
+			entity.CreatedAt = timestamppb.New(createdAt.Time)
+		}
+		if updatedAt.Valid {
+			entity.UpdatedAt = timestamppb.New(updatedAt.Time)
+		}
+		if updatedBy.Valid {
+			entity.UpdatedBy = updatedBy.String
+		}
+
+		entities = append(entities, &entity)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, status.Errorf(codes.Internal, "error iterating {{$.EntityName | lower}}s: %v", err)
+	}
+
+	return &pb.{{.ResponseType}}{
+		{{$.EntityName | pluralize}}: entities,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+{{end}}
+{{end}}
