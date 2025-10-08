@@ -1,0 +1,32 @@
+package handler
+
+import (
+	"context"
+	"database/sql"
+	
+	pb "{{.PackagePath}}"
+	"{{.ModulePath}}/src/pkg/database"
+)
+
+type Handler struct {
+	pb.Unimplemented{{.ServiceName}}Server
+	db *sql.DB
+}
+
+func NewHandler() *Handler {
+	return &Handler{
+		db: database.DB,
+	}
+}
+
+func (h *Handler) queryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return h.db.QueryRowContext(ctx, query, args...)
+}
+
+func (h *Handler) query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return h.db.QueryContext(ctx, query, args...)
+}
+
+func (h *Handler) execQuery(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return h.db.ExecContext(ctx, query, args...)
+}

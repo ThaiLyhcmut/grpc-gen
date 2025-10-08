@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+gen_skeleton
+/src/service/*/main
+
+# Test binary
+*.test
+*.out
+
+# Build
+/bin/
+/build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Env files
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

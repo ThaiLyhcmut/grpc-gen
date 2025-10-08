@@ -69,77 +69,77 @@ import "proto/common/common.proto";
 // ============= %s Entity =============
 // Example structure - uncomment and modify as needed:
 //
-// message %s {
-//   string id = 1;
-//   string name = 2;
-//   %sStatus status = 3;
-//   google.protobuf.Timestamp created_at = 4;
-//   google.protobuf.Timestamp updated_at = 5;
-//   string created_by = 6;
-//   string updated_by = 7;
-// }
-//
-// enum %sStatus {
-//   ACTIVE = 0;
-//   INACTIVE = 1;
-// }
-//
-// message Create%sRequest {
-//   string name = 1;
-//   %sStatus status = 2;
-//   string created_by = 3;
-// }
-//
-// message Create%sResponse {
-//   %s %s = 1;
-// }
-//
-// message Get%sRequest {
-//   string id = 1;
-// }
-//
-// message Get%sResponse {
-//   %s %s = 1;
-// }
-//
-// message Update%sRequest {
-//   string id = 1;
-//   optional string name = 2;
-//   optional %sStatus status = 3;
-//   string updated_by = 4;
-// }
-//
-// message Update%sResponse {
-//   %s %s = 1;
-// }
-//
-// message Delete%sRequest {
-//   string id = 1;
-// }
-//
-// message Delete%sResponse {
-//   bool success = 1;
-// }
-//
-// message List%sRequest {
-//   common.SearchRequest search = 1;
-// }
-//
-// message List%sResponse {
-//   repeated %s %s = 1;
-//   int32 total = 2;
-//   int32 page = 3;
-//   int32 page_size = 4;
-// }
+message %s {
+  string id = 1;
+  string name = 2;
+  %sStatus status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  string created_by = 6;
+  string updated_by = 7;
+}
+
+enum %sStatus {
+  ACTIVE = 0;
+  INACTIVE = 1;
+}
+
+message Create%sRequest {
+  string name = 1;
+  %sStatus status = 2;
+  string created_by = 3;
+}
+
+message Create%sResponse {
+  %s %s = 1;
+}
+
+message Get%sRequest {
+  string id = 1;
+}
+
+message Get%sResponse {
+  %s %s = 1;
+}
+
+message Update%sRequest {
+  string id = 1;
+  optional string name = 2;
+  optional %sStatus status = 3;
+  string updated_by = 4;
+}
+
+message Update%sResponse {
+  %s %s = 1;
+}
+
+message Delete%sRequest {
+  string id = 1;
+}
+
+message Delete%sResponse {
+  bool success = 1;
+}
+
+message List%sRequest {
+  common.SearchRequest search = 1;
+}
+
+message List%sResponse {
+  repeated %s %s = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
 
 // ============= Service =============
 service %sService {
   // Uncomment and modify these RPC methods as needed:
-  // rpc Create%s(Create%sRequest) returns (Create%sResponse);
-  // rpc Get%s(Get%sRequest) returns (Get%sResponse);
-  // rpc Update%s(Update%sRequest) returns (Update%sResponse);
-  // rpc Delete%s(Delete%sRequest) returns (Delete%sResponse);
-  // rpc List%s(List%sRequest) returns (List%sResponse);
+  rpc Create%s(Create%sRequest) returns (Create%sResponse);
+  rpc Get%s(Get%sRequest) returns (Get%sResponse);
+  rpc Update%s(Update%sRequest) returns (Update%sResponse);
+  rpc Delete%s(Delete%sRequest) returns (Delete%sResponse);
+  rpc List%s(List%sRequest) returns (List%sResponse);
 }
 `, serviceLower, modulePath, serviceLower,
 		entityName,
