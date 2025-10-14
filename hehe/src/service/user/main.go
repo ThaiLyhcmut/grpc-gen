@@ -35,7 +35,7 @@ func main() {
 	// Start gRPC server
 	port := os.Getenv("SERVICE_PORT")
 	if port == "" {
-		port = "50051"
+		port = "5555"
 	}
 
 	lis, err := net.Listen("tcp", ":"+port)

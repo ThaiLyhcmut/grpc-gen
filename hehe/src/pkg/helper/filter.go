@@ -1,10 +1,12 @@
 package helper
 
 import (
-	"fmt"
-	pbCommon "hehe/proto/common"
+	pb "hehe/proto/common"
+	
 	"strings"
+	"fmt"
 )
+
 
 // BuildFilterCondition builds SQL WHERE condition from FilterCondition (MySQL syntax with ?)
 func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface{}) string {
@@ -61,3 +63,4 @@ func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface
 
 	return "1=1" // fallback
 }
+

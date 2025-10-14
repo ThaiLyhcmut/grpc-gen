@@ -47,6 +47,14 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		{{$field.GoName}}Str = "{{. | lower}}"
 	{{end}}}
 	{{end}}
+	// Handle created_by field (dynamic based on proto definition)
+	{{if $.IsCreatedByOptional}}var createdBy interface{}
+	if req.CreatedBy != nil {
+		createdBy = *req.CreatedBy
+	} else {
+		createdBy = nil
+	}{{else}}createdBy := req.CreatedBy{{end}}
+
 	// Insert into database
 	query := `
 		INSERT INTO {{$.TableName}} (id, {{$.CreateFieldsSQL}}, created_by, created_at, updated_at)
@@ -58,7 +66,7 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
 		{{else if .IsOptional}}{{.GoName}},
 		{{else}}req.{{.GoName}},
-		{{end}}{{end}}req.CreatedBy,
+		{{end}}{{end}}createdBy,
 	)
 
 	if err != nil {
@@ -95,14 +103,14 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 
 	var entity pb.{{$.EntityName}}
 	var createdAt, updatedAt sql.NullTime
-	var updatedBy sql.NullString
+	var createdBy, updatedBy sql.NullString
 	{{range $.EnumFields}}var {{.GoName}}Str string
 	{{end}}
 	err := h.queryRow(ctx, query, req.Id).Scan(
 		{{range $.ScanFields}}&{{.}},
 		{{end}}&createdAt,
 		&updatedAt,
-		&entity.CreatedBy,
+		&createdBy,
 		&updatedBy,
 	)
 
@@ -127,8 +135,11 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	if updatedAt.Valid {
 		entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 	}
+	if createdBy.Valid {
+		entity.CreatedBy = &createdBy.String
+	}
 	if updatedBy.Valid {
-		entity.UpdatedBy = updatedBy.String
+		entity.UpdatedBy = &updatedBy.String
 	}
 
 	return &pb.{{.ResponseType}}{
@@ -150,7 +161,8 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	updateFields := []string{}
 	args := []interface{}{}
 
-	{{range $.UpdateFields}}{{$field := .}}if req.{{.GoName}} != nil {
+	{{range $.UpdateFields}}{{$field := .}}{{if isOptionalUpdate .DBField $.OptionalUpdateFields}}// Optional field: {{.GoName}}
+	if req.{{.GoName}} != nil {
 		updateFields = append(updateFields, "{{.DBField}} = ?")
 		{{if eq .IsEnum true}}{{.GoName}}Str := "{{.DefaultDBValue}}"
 		switch *req.{{.GoName}} {
@@ -161,14 +173,27 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		{{else}}args = append(args, *req.{{.GoName}})
 		{{end}}
 	}
+	{{else}}// Required field: {{.GoName}}
+	updateFields = append(updateFields, "{{.DBField}} = ?")
+	{{if eq .IsEnum true}}{{.GoName}}Str := "{{.DefaultDBValue}}"
+	switch req.{{.GoName}} {
+	{{range .EnumValues}}case pb.{{$field.EnumType}}_{{.}}:
+		{{$field.GoName}}Str = "{{. | lower}}"
+	{{end}}}
+	args = append(args, {{.GoName}}Str)
+	{{else}}args = append(args, req.{{.GoName}})
 	{{end}}
+	{{end}}{{end}}
 	if len(updateFields) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no fields to update")
 	}
 
-	// Add updated_by and updated_at
-	updateFields = append(updateFields, "updated_by = ?")
-	args = append(args, req.UpdatedBy)
+	// Add updated_by and updated_at (dynamic based on proto definition)
+	{{if $.IsUpdatedByOptional}}if req.UpdatedBy != nil {
+		updateFields = append(updateFields, "updated_by = ?")
+		args = append(args, *req.UpdatedBy)
+	}{{else}}updateFields = append(updateFields, "updated_by = ?")
+	args = append(args, req.UpdatedBy){{end}}
 	updateFields = append(updateFields, "updated_at = NOW()")
 
 	// Add id as last parameter
@@ -309,14 +334,14 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	for rows.Next() {
 		var entity pb.{{$.EntityName}}
 		var createdAt, updatedAt sql.NullTime
-		var updatedBy sql.NullString
+		var createdBy, updatedBy sql.NullString
 		{{range $.EnumFields}}var {{.GoName}}Str string
 		{{end}}
 		err := rows.Scan(
 			{{range $.ScanFields}}&{{.}},
 			{{end}}&createdAt,
 			&updatedAt,
-			&entity.CreatedBy,
+			&createdBy,
 			&updatedBy,
 		)
 		if err != nil {
@@ -337,8 +362,11 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		if updatedAt.Valid {
 			entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 		}
+		if createdBy.Valid {
+			entity.CreatedBy = &createdBy.String
+		}
 		if updatedBy.Valid {
-			entity.UpdatedBy = updatedBy.String
+			entity.UpdatedBy = &updatedBy.String
 		}
 
 		entities = append(entities, &entity)

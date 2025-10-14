@@ -42,20 +42,24 @@ type Field struct {
 }
 
 type CRUDHandlerData struct {
-	ModulePath         string
-	PackagePath        string
-	EntityName         string
-	TableName          string
-	Methods            []Method
-	EnumType           string
-	RequiredFields     []Field
-	OptionalFields     []Field
-	EnumFields         []Field
-	FilterableFields   []string
-	CreateFields       []Field
-	CreateFieldsSQL    string
-	CreatePlaceholders string
-	UpdateFields       []Field
-	SelectFieldsSQL    string
-	ScanFields         []string
+	ModulePath           string
+	PackagePath          string
+	EntityName           string
+	TableName            string
+	Methods              []Method
+	EnumType             string
+	RequiredFields       []Field
+	OptionalFields       []Field
+	EnumFields           []Field
+	FilterableFields     []string
+	CreateFields         []Field
+	CreateFieldsSQL      string
+	CreatePlaceholders   string
+	UpdateFields         []Field
+	SelectFieldsSQL      string
+	ScanFields           []string
+	OptionalEntityFields []string // Optional fields in entity (created_by, updated_by, etc)
+	OptionalUpdateFields []string // Optional fields in UpdateRequest
+	IsCreatedByOptional  bool     // Whether created_by is optional in CreateRequest
+	IsUpdatedByOptional  bool     // Whether updated_by is optional in UpdateRequest
 }

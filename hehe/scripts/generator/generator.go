@@ -72,7 +72,7 @@ func GenerateEntityHandler(handlerDir string, data types.EntityHandlerData) {
 }
 
 // GenerateCRUDHandler creates a full CRUD handler from template
-func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, modulePath string) {
+func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, modulePath string) {
 	// Prepare data for template
 	requiredFields := []types.Field{}
 	optionalFields := []types.Field{}
@@ -161,23 +161,37 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 	selectFields = append([]string{"id"}, createFieldNames...)
 	selectFields = append(selectFields, "created_at", "updated_at", "created_by", "updated_by")
 
+	// Get optional entity fields
+	optionalEntityFields := []string{}
+	if optFields, ok := optionalEntityFieldsMap[entityName]; ok {
+		optionalEntityFields = optFields
+	}
+
+	// Get optional update fields
+	optionalUpdateFields := []string{}
+	if optFields, ok := optionalUpdateFieldsMap[entityName]; ok {
+		optionalUpdateFields = optFields
+	}
+
 	data := types.CRUDHandlerData{
-		ModulePath:         modulePath,
-		PackagePath:        packagePath,
-		EntityName:         entityName,
-		TableName:          entityName,
-		Methods:            methods,
-		EnumType:           enumType,
-		RequiredFields:     requiredFields,
-		OptionalFields:     optionalFields,
-		EnumFields:         enumFields,
-		FilterableFields:   filterableFields,
-		CreateFields:       createFields,
-		CreateFieldsSQL:    strings.Join(createFieldNames, ", "),
-		CreatePlaceholders: strings.Join(createPlaceholders, ", "),
-		UpdateFields:       updateFields,
-		SelectFieldsSQL:    strings.Join(selectFields, ", "),
-		ScanFields:         scanFields,
+		ModulePath:           modulePath,
+		PackagePath:          packagePath,
+		EntityName:           entityName,
+		TableName:            entityName,
+		Methods:              methods,
+		EnumType:             enumType,
+		RequiredFields:       requiredFields,
+		OptionalFields:       optionalFields,
+		EnumFields:           enumFields,
+		FilterableFields:     filterableFields,
+		CreateFields:         createFields,
+		CreateFieldsSQL:      strings.Join(createFieldNames, ", "),
+		CreatePlaceholders:   strings.Join(createPlaceholders, ", "),
+		UpdateFields:         updateFields,
+		SelectFieldsSQL:      strings.Join(selectFields, ", "),
+		ScanFields:           scanFields,
+		OptionalEntityFields: optionalEntityFields,
+		OptionalUpdateFields: optionalUpdateFields,
 	}
 
 	// Create template with custom functions
@@ -196,6 +210,22 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 			}
 			// Default: just add s
 			return s + "s"
+		},
+		"isOptionalEntity": func(fieldName string, optionalFields []string) bool {
+			for _, opt := range optionalFields {
+				if opt == fieldName {
+					return true
+				}
+			}
+			return false
+		},
+		"isOptionalUpdate": func(fieldName string, optionalFields []string) bool {
+			for _, opt := range optionalFields {
+				if opt == fieldName {
+					return true
+				}
+			}
+			return false
 		},
 	}
 

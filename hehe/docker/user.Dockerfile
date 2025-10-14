@@ -28,7 +28,7 @@ RUN mkdir -p env
 COPY env/user.env env/user.env
 
 # Expose port
-EXPOSE 50051
+EXPOSE 5555
 
 # Run the service
 CMD ["./user-service"]

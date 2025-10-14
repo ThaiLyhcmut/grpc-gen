@@ -43,6 +43,14 @@ func (h *Handler) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*p
 		StatusStr = "inactive"
 	}
 	
+	// Handle optional created_by field
+	var createdBy interface{}
+	if req.CreatedBy != nil {
+		createdBy = *req.CreatedBy
+	} else {
+		createdBy = nil
+	}
+
 	// Insert into database
 	query := `
 		INSERT INTO User (id, name, status, created_by, created_at, updated_at)
@@ -53,7 +61,7 @@ func (h *Handler) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*p
 		id,
 		req.Name,
 		StatusStr,
-		req.CreatedBy,
+		createdBy,
 	)
 
 	if err != nil {
@@ -100,7 +108,7 @@ func (h *Handler) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetU
 
 	var entity pb.User
 	var createdAt, updatedAt sql.NullTime
-	var updatedBy sql.NullString
+	var createdBy, updatedBy sql.NullString
 	var StatusStr string
 	
 	err := h.queryRow(ctx, query, req.Id).Scan(
@@ -109,7 +117,7 @@ func (h *Handler) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetU
 		&StatusStr,
 		&createdAt,
 		&updatedAt,
-		&entity.CreatedBy,
+		&createdBy,
 		&updatedBy,
 	)
 
@@ -136,8 +144,11 @@ func (h *Handler) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetU
 	if updatedAt.Valid {
 		entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 	}
+	if createdBy.Valid {
+		entity.CreatedBy = &createdBy.String
+	}
 	if updatedBy.Valid {
-		entity.UpdatedBy = updatedBy.String
+		entity.UpdatedBy = &updatedBy.String
 	}
 
 	return &pb.GetUserResponse{
@@ -169,23 +180,23 @@ func (h *Handler) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*p
 	updateFields := []string{}
 	args := []interface{}{}
 
+	// Optional field: Name
 	if req.Name != nil {
 		updateFields = append(updateFields, "name = ?")
 		args = append(args, *req.Name)
 		
 	}
-	if req.Status != nil {
-		updateFields = append(updateFields, "status = ?")
-		StatusStr := "active"
-		switch *req.Status {
-		case pb.UserStatus_ACTIVE:
-			StatusStr = "active"
-		case pb.UserStatus_INACTIVE:
-			StatusStr = "inactive"
-		}
-		args = append(args, StatusStr)
-		
+	// Required field: Status
+	updateFields = append(updateFields, "status = ?")
+	StatusStr := "active"
+	switch req.Status {
+	case pb.UserStatus_ACTIVE:
+		StatusStr = "active"
+	case pb.UserStatus_INACTIVE:
+		StatusStr = "inactive"
 	}
+	args = append(args, StatusStr)
+	
 	
 	if len(updateFields) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no fields to update")
@@ -355,7 +366,7 @@ func (h *Handler) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.
 	for rows.Next() {
 		var entity pb.User
 		var createdAt, updatedAt sql.NullTime
-		var updatedBy sql.NullString
+		var createdBy, updatedBy sql.NullString
 		var StatusStr string
 		
 		err := rows.Scan(
@@ -364,7 +375,7 @@ func (h *Handler) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.
 			&StatusStr,
 			&createdAt,
 			&updatedAt,
-			&entity.CreatedBy,
+			&createdBy,
 			&updatedBy,
 		)
 		if err != nil {
@@ -387,8 +398,11 @@ func (h *Handler) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.
 		if updatedAt.Valid {
 			entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 		}
+		if createdBy.Valid {
+			entity.CreatedBy = &createdBy.String
+		}
 		if updatedBy.Valid {
-			entity.UpdatedBy = updatedBy.String
+			entity.UpdatedBy = &updatedBy.String
 		}
 
 		entities = append(entities, &entity)

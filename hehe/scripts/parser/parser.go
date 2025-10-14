@@ -79,6 +79,60 @@ func ParseEnumsFromProto(filename string) (map[string][]string, error) {
 	return enums, scanner.Err()
 }
 
+// ParseFieldsFromUpdateRequests extracts optional fields from UpdateXRequest messages
+func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	optionalUpdateFields := make(map[string][]string)
+	scanner := bufio.NewScanner(file)
+
+	messageRegex := regexp.MustCompile(`message\s+Update(\w+)Request\s*\{`)
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+
+	var currentEntity string
+	inMessage := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if starting an UpdateRequest message
+		if matches := messageRegex.FindStringSubmatch(line); len(matches) == 2 {
+			currentEntity = matches[1]
+			inMessage = true
+			optionalUpdateFields[currentEntity] = []string{}
+			continue
+		}
+
+		// Check if inside message
+		if inMessage {
+			if strings.Contains(line, "}") {
+				inMessage = false
+				currentEntity = ""
+			} else if matches := fieldRegex.FindStringSubmatch(line); len(matches) >= 4 {
+				isOptional := matches[1] != ""
+				fieldName := matches[3]
+
+				// Skip id, updated_by (system fields)
+				if fieldName == "id" || fieldName == "updated_by" {
+					continue
+				}
+
+				// Only track optional fields
+				if isOptional {
+					dbFieldName := utils.ToSnakeCase(fieldName)
+					optionalUpdateFields[currentEntity] = append(optionalUpdateFields[currentEntity], dbFieldName)
+				}
+			}
+		}
+	}
+
+	return optionalUpdateFields, scanner.Err()
+}
+
 // ParseFieldsFromCreateRequests extracts required and optional fields from CreateXRequest messages
 func ParseFieldsFromCreateRequests(filename string) (map[string][]string, map[string][]string, error) {
 	file, err := os.Open(filename)
@@ -118,10 +172,8 @@ func ParseFieldsFromCreateRequests(filename string) (map[string][]string, map[st
 				isOptional := matches[1] != ""
 				fieldName := matches[3]
 
-				// Skip system fields
-				if fieldName == "created_by" || fieldName == "updated_by" {
-					continue
-				}
+				// Mark system fields as always optional
+				// but don't skip them - we need to track them
 
 				dbFieldName := utils.ToSnakeCase(fieldName)
 				if isOptional {
@@ -134,6 +186,58 @@ func ParseFieldsFromCreateRequests(filename string) (map[string][]string, map[st
 	}
 
 	return requiredFields, optionalFields, scanner.Err()
+}
+
+// ParseEntityOptionalFields extracts optional field names from entity messages
+func ParseEntityOptionalFields(filename string) (map[string][]string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	optionalEntityFields := make(map[string][]string)
+	scanner := bufio.NewScanner(file)
+
+	messageRegex := regexp.MustCompile(`message\s+(\w+)\s*\{`)
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+
+	var currentEntity string
+	inMessage := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if starting an entity message (not Request/Response)
+		if matches := messageRegex.FindStringSubmatch(line); len(matches) == 2 {
+			msgName := matches[1]
+			if !strings.HasSuffix(msgName, "Request") && !strings.HasSuffix(msgName, "Response") {
+				currentEntity = msgName
+				inMessage = true
+				optionalEntityFields[currentEntity] = []string{}
+			}
+			continue
+		}
+
+		// Check if inside message
+		if inMessage {
+			if strings.Contains(line, "}") {
+				inMessage = false
+				currentEntity = ""
+			} else if matches := fieldRegex.FindStringSubmatch(line); len(matches) >= 4 {
+				isOptional := matches[1] != ""
+				fieldName := matches[3]
+
+				// Track optional fields (including system fields)
+				if isOptional {
+					dbFieldName := utils.ToSnakeCase(fieldName)
+					optionalEntityFields[currentEntity] = append(optionalEntityFields[currentEntity], dbFieldName)
+				}
+			}
+		}
+	}
+
+	return optionalEntityFields, scanner.Err()
 }
 
 // ParseEntityFields extracts field information from entity messages

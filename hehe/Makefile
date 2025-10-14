@@ -23,7 +23,7 @@ all: proto-common proto-user
 
 
 gen-user: gen-tool proto-user
-	$(GEN) user UserService 50051
+	$(GEN) user UserService 5555
 
 # Generate all service skeletons
 gen-all: gen-tool all gen-user

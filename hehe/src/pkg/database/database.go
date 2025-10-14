@@ -2,11 +2,11 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
-
+	
 	"log"
 	"os"
 	"time"
+	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
 )

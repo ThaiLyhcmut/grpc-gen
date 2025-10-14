@@ -56,6 +56,18 @@ func main() {
 		log.Fatalf("Failed to parse required/optional fields: %v", err)
 	}
 
+	// Parse entity messages to get optional entity fields
+	optionalEntityFieldsMap, err := parser.ParseEntityOptionalFields(protoFile)
+	if err != nil {
+		log.Fatalf("Failed to parse optional entity fields: %v", err)
+	}
+
+	// Parse update messages to get optional update fields
+	optionalUpdateFieldsMap, err := parser.ParseFieldsFromUpdateRequests(protoFile)
+	if err != nil {
+		log.Fatalf("Failed to parse optional update fields: %v", err)
+	}
+
 	// Create directories
 	serviceDir := filepath.Join("src", "service", protoName)
 	handlerDir := filepath.Join(serviceDir, "handler")
@@ -85,7 +97,7 @@ func main() {
 	for entityName, methods := range entityMethods {
 		if parser.IsCRUDEntity(methods) {
 			// Generate full CRUD handler
-			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, modulePath)
+			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, optionalEntityFieldsMap, optionalUpdateFieldsMap, modulePath)
 		} else {
 			// Generate simple entity handler
 			generator.GenerateEntityHandler(handlerDir, types.EntityHandlerData{
