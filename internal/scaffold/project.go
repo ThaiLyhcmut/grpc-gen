@@ -173,7 +173,7 @@ Generated gRPC microservices project with CRUD operations.
 ### 1. Add a new service
 
 `+"```bash"+`
-grpc-generator add-service user 50051
+grpc-gen add-service user 50051
 `+"```"+`
 
 ### 2. Define entities in proto file

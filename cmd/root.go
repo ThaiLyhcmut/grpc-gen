@@ -5,9 +5,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "grpc-generator",
+	Use:   "grpc-gen",
 	Short: "A CLI tool to generate gRPC microservices with CRUD operations",
-	Long: `grpc-generator helps you quickly scaffold gRPC microservices with:
+	Long: `grpc-gen helps you quickly scaffold gRPC microservices with:
 - Full CRUD operations (Create, Read, Update, Delete, List)
 - Database integration with MySQL
 - Automatic code generation from proto files
@@ -15,8 +15,8 @@ var rootCmd = &cobra.Command{
 - Docker configuration
 
 Example usage:
-  grpc-generator init my-project
-  grpc-generator add-service user 50051`,
+  grpc-gen init my-project
+  grpc-gen add-service user 50051`,
 }
 
 func Execute() error {

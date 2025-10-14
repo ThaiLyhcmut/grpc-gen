@@ -17,8 +17,8 @@ var addServiceCmd = &cobra.Command{
 - Ready for entity definitions
 
 Example:
-  grpc-generator add-service user 50051
-  grpc-generator add-service order 50052`,
+  grpc-gen add-service user 50051
+  grpc-gen add-service order 50052`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]

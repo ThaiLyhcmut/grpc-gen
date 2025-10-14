@@ -49,7 +49,7 @@ var initCmd = &cobra.Command{
 		fmt.Printf("\n✅ Project created successfully!\n\n")
 		fmt.Println("Next steps:")
 		fmt.Printf("  cd %s\n", projectName)
-		fmt.Println("  grpc-generator add-service user 50051")
+		fmt.Println("  grpc-gen add-service user 50051")
 		fmt.Println("  make gen-user")
 		fmt.Println("  go build ./src/service/user")
 		fmt.Println()
