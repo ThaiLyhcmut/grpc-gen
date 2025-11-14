@@ -71,9 +71,11 @@ func main() {
 	// Create directories
 	serviceDir := filepath.Join("src", "service", protoName)
 	handlerDir := filepath.Join(serviceDir, "handler")
+	certsDir := filepath.Join(serviceDir, "certs")
+	logDir := filepath.Join(serviceDir, "log")
 	os.MkdirAll(handlerDir, 0755)
-	os.MkdirAll("env", 0755)
-	os.MkdirAll("docker", 0755)
+	os.MkdirAll(certsDir, 0755)
+	os.MkdirAll(logDir, 0755)
 
 	data := types.Data{
 		PackagePath: packagePath,
@@ -108,11 +110,17 @@ func main() {
 		}
 	}
 
-	// Generate env file
-	generator.GenerateEnvFile(protoName, data)
+	// Generate service-level env file
+	generator.GenerateServiceEnvFile(protoName, data)
 
 	// Generate Dockerfile
 	generator.GenerateDockerfile(protoName, data)
+
+	// Generate docker-compose.yml
+	generator.GenerateDockerCompose(protoName, data)
+
+	// Generate .gitignore
+	generator.GenerateGitignore(protoName)
 
 	log.Printf("Generated skeleton for %s service\n", serviceName)
 }

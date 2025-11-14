@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/thailyhcmut/grpc-gen/proto/user";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// ============= User Entity =============
+// Example structure - uncomment and modify as needed:
+//
+message User {
+  string id = 1;
+  string name = 2;
+  UserStatus status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  string created_by = 6;
+  string updated_by = 7;
+}
+
+enum UserStatus {
+  ACTIVE = 0;
+  INACTIVE = 1;
+}
+
+message CreateUserRequest {
+  string name = 1;
+  UserStatus status = 2;
+  string created_by = 3;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message UpdateUserRequest {
+  string id = 1;
+  optional string name = 2;
+  optional UserStatus status = 3;
+  string updated_by = 4;
+}
+
+message UpdateUserResponse {
+  User user = 1;
+}
+
+message DeleteUserRequest {
+  string id = 1;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+}
+
+message ListUsersRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Service =============
+service UserService {
+  // Uncomment and modify these RPC methods as needed:
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+}

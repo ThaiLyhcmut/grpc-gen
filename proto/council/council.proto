@@ -1,0 +1,307 @@
+syntax = "proto3";
+
+package council;
+
+option go_package = "./council";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// ============= Enums =============
+enum DefencePosition {
+  PRESIDENT = 0;
+  SECRETARY = 1;
+  REVIEWER = 2;
+  MEMBER = 3;
+}
+
+// ============= Council =============
+message Council {
+  string id = 1;
+  string title = 2;
+  string major_code = 3;
+  string semester_code = 4;
+  google.protobuf.Timestamp time_start = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string created_by = 8;
+  string updated_by = 9;
+}
+
+message CreateCouncilRequest {
+  string title = 1;
+  string major_code = 2;
+  string semester_code = 3;
+  optional google.protobuf.Timestamp time_start = 4;
+  string created_by = 5;
+}
+
+message CreateCouncilResponse {
+  Council council = 1;
+}
+
+message GetCouncilRequest {
+  string id = 1;
+}
+
+message GetCouncilResponse {
+  Council council = 1;
+}
+
+message UpdateCouncilRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string major_code = 3;
+  optional string semester_code = 4;
+  optional google.protobuf.Timestamp time_start = 5;
+  string updated_by = 6;
+}
+
+message UpdateCouncilResponse {
+  Council council = 1;
+}
+
+message DeleteCouncilRequest {
+  string id = 1;
+}
+
+message DeleteCouncilResponse {
+  bool success = 1;
+}
+
+message ListCouncilsRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListCouncilsResponse {
+  repeated Council councils = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Defence =============
+message Defence {
+  string id = 1;
+  string title = 2;
+  string council_code = 3;
+  string teacher_code = 4;
+  DefencePosition position = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string created_by = 8;
+  string updated_by = 9;
+}
+
+message CreateDefenceRequest {
+  string title = 1;
+  string council_code = 2;
+  string teacher_code = 3;
+  DefencePosition position = 4;
+  string created_by = 5;
+}
+
+message CreateDefenceResponse {
+  Defence defence = 1;
+}
+
+message GetDefenceRequest {
+  string id = 1;
+}
+
+message GetDefenceResponse {
+  Defence defence = 1;
+}
+
+message UpdateDefenceRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string council_code = 3;
+  optional string teacher_code = 4;
+  optional DefencePosition position = 5;
+  string updated_by = 6;
+}
+
+message UpdateDefenceResponse {
+  Defence defence = 1;
+}
+
+message DeleteDefenceRequest {
+  string id = 1;
+}
+
+message DeleteDefenceResponse {
+  bool success = 1;
+}
+
+message ListDefencesRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListDefencesResponse {
+  repeated Defence defences = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Grade_defence =============
+message GradeDefence {
+  string id = 1;
+  string defence_code = 2;
+  string enrollment_code = 3;
+  string note = 4;
+  int32 total_score = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string created_by = 8;
+  string updated_by = 9;
+}
+
+message CreateGradeDefenceRequest {
+  string defence_code = 1;
+  string enrollment_code = 2;
+  optional string note = 3;
+  optional int32 total_score = 4;
+  string created_by = 5;
+}
+
+message CreateGradeDefenceResponse {
+  GradeDefence grade_defence = 1;
+}
+
+message GetGradeDefenceRequest {
+  string id = 1;
+}
+
+message GetGradeDefenceResponse {
+  GradeDefence grade_defence = 1;
+}
+
+message UpdateGradeDefenceRequest {
+  string id = 1;
+  optional string defence_code = 2;
+  optional string enrollment_code = 3;
+  optional string note = 4;
+  optional int32 total_score = 5;
+  string updated_by = 6;
+}
+
+message UpdateGradeDefenceResponse {
+  GradeDefence grade_defence = 1;
+}
+
+message DeleteGradeDefenceRequest {
+  string id = 1;
+}
+
+message DeleteGradeDefenceResponse {
+  bool success = 1;
+}
+
+message ListGradeDefencesRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListGradeDefencesResponse {
+  repeated GradeDefence grade_defences = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Grade_defence_criterion =============
+message GradeDefenceCriterion {
+  string id = 1;
+  string grade_defence_code = 2;
+  string name = 3;
+  string score = 4;
+  string maxScore = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string created_by = 8;
+  string updated_by = 9;
+}
+
+message CreateGradeDefenceCriterionRequest {
+  string grade_defence_code = 1;
+  optional string name = 2;
+  optional string score = 3;
+  optional string maxScore = 4;
+  optional string created_by = 5;
+}
+
+message CreateGradeDefenceCriterionResponse {
+  GradeDefenceCriterion grade_defence_criterion = 1;
+}
+
+message GetGradeDefenceCriterionRequest {
+  string id = 1;
+}
+
+message GetGradeDefenceCriterionResponse {
+  GradeDefenceCriterion grade_defence_criterion = 1;
+}
+
+message UpdateGradeDefenceCriterionRequest {
+  string id = 1;
+  optional string grade_defence_code = 2;
+  optional string name = 3;
+  optional string score = 4;
+  optional string maxScore = 5;
+  optional string updated_by = 6;
+}
+
+message UpdateGradeDefenceCriterionResponse {
+  GradeDefenceCriterion grade_defence_criterion = 1;
+}
+
+message DeleteGradeDefenceCriterionRequest {
+  string id = 1;
+}
+
+message DeleteGradeDefenceCriterionResponse {
+  bool success = 1;
+}
+
+message ListGradeDefenceCriteriaRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListGradeDefenceCriteriaResponse {
+  repeated GradeDefenceCriterion grade_defence_criteria = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Service =============
+service CouncilService {
+  // Council
+  rpc CreateCouncil(CreateCouncilRequest) returns (CreateCouncilResponse);
+  rpc GetCouncil(GetCouncilRequest) returns (GetCouncilResponse);
+  rpc UpdateCouncil(UpdateCouncilRequest) returns (UpdateCouncilResponse);
+  rpc DeleteCouncil(DeleteCouncilRequest) returns (DeleteCouncilResponse);
+  rpc ListCouncils(ListCouncilsRequest) returns (ListCouncilsResponse);
+
+  // Defence
+  rpc CreateDefence(CreateDefenceRequest) returns (CreateDefenceResponse);
+  rpc GetDefence(GetDefenceRequest) returns (GetDefenceResponse);
+  rpc UpdateDefence(UpdateDefenceRequest) returns (UpdateDefenceResponse);
+  rpc DeleteDefence(DeleteDefenceRequest) returns (DeleteDefenceResponse);
+  rpc ListDefences(ListDefencesRequest) returns (ListDefencesResponse);
+
+  // GradeDefence
+  rpc CreateGradeDefence(CreateGradeDefenceRequest) returns (CreateGradeDefenceResponse);
+  rpc GetGradeDefence(GetGradeDefenceRequest) returns (GetGradeDefenceResponse);
+  rpc UpdateGradeDefence(UpdateGradeDefenceRequest) returns (UpdateGradeDefenceResponse);
+  rpc DeleteGradeDefence(DeleteGradeDefenceRequest) returns (DeleteGradeDefenceResponse);
+  rpc ListGradeDefences(ListGradeDefencesRequest) returns (ListGradeDefencesResponse);
+
+  // GradeDefenceCriterion
+  rpc CreateGradeDefenceCriterion(CreateGradeDefenceCriterionRequest) returns (CreateGradeDefenceCriterionResponse);
+  rpc GetGradeDefenceCriterion(GetGradeDefenceCriterionRequest) returns (GetGradeDefenceCriterionResponse);
+  rpc UpdateGradeDefenceCriterion(UpdateGradeDefenceCriterionRequest) returns (UpdateGradeDefenceCriterionResponse);
+  rpc DeleteGradeDefenceCriterion(DeleteGradeDefenceCriterionRequest) returns (DeleteGradeDefenceCriterionResponse);
+  rpc ListGradeDefenceCriteria(ListGradeDefenceCriteriaRequest) returns (ListGradeDefenceCriteriaResponse);
+}

@@ -4,10 +4,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"{{.ModulePath}}/src/service/pkg/database"
+	logger2 "{{.ModulePath}}/src/service/pkg/logger"
+	"{{.ModulePath}}/src/service/pkg/tls"
 
 	pb "{{.PackagePath}}"
-	"{{.ModulePath}}/src/pkg/database"
-	"{{.ModulePath}}/src/pkg/logger"
 	"{{.ModulePath}}/src/service/{{.ProtoName}}/handler"
 
 	"github.com/joho/godotenv"
@@ -16,21 +17,32 @@ import (
 
 func main() {
 	// Load environment variables
-	if err := godotenv.Load("env/{{.ProtoName}}.env"); err != nil {
+	if err := godotenv.Load("./{{.ProtoName}}.env"); err != nil {
 		log.Printf("Warning: .env file not found: %v", err)
 	}
 
 	// Initialize file logger
-	if err := logger.InitFileLogger("{{.ProtoName}}-service", "log"); err != nil {
+	if err := logger2.InitFileLogger("{{.ProtoName}}-service", "log"); err != nil {
 		log.Fatalf("Failed to initialize file logger: %v", err)
 	}
-	defer logger.GetFileLogger().Close()
+	defer logger2.GetFileLogger().Close()
 
 	// Initialize database
 	if err := database.InitDB(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
+
+	// Verify TLS certificates exist
+	if err := tls.VerifyCertificatesExist("{{.ProtoName}}"); err != nil {
+		log.Fatalf("TLS certificate verification failed: %v", err)
+	}
+
+	// Load TLS credentials
+	creds, err := tls.LoadServerTLSCredentials("{{.ProtoName}}")
+	if err != nil {
+		log.Fatalf("Failed to load TLS credentials: %v", err)
+	}
 
 	// Start gRPC server
 	port := os.Getenv("SERVICE_PORT")
@@ -44,10 +56,11 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
-		logger.UnaryServerInterceptor(),
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(logger2.UnaryServerInterceptor()),
 	)
 
-	h := handler.NewHandler()
+	h := handler.NewHandler(database.GetDB())
 	pb.Register{{.ServiceName}}Server(grpcServer, h)
 
 	log.Printf("{{.ServiceName}} listening on port %s", port)

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  {{.ProtoName}}:
+    build:
+      context: ../../..
+      dockerfile: src/service/{{.ProtoName}}/Dockerfile
+    image: {{.ModulePath}}/{{.ProtoName}}:latest
+    container_name: {{.ProtoName}}_service
+    env_file:
+      - {{.ProtoName}}.env
+    ports:
+      - "{{.Port}}:{{.Port}}"
+    volumes:
+      - .:/app/service:ro
+      - ../../../logs:/app/logs
+    networks:
+      - {{.ProtoName}}_network
+    restart: unless-stopped
+
+networks:
+  {{.ProtoName}}_network:
+    driver: bridge

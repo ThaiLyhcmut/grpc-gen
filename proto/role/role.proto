@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package role;
+
+option go_package = "./role";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+enum RoleType {
+  ACADEMIC_AFFAIRS_STAFF = 0;
+  DEPARTMENT_LECTURER = 1;
+  TEACHER = 2;
+}
+
+// ============= RoleSystem =============
+message RoleSystem {
+  string id = 1;
+  string title = 2;
+  string teacher_code = 3;
+  RoleType role = 4;
+  string semester_code = 5;
+  bool activate = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  string created_by = 9;
+  string updated_by = 10;
+}
+
+message CreateRoleSystemRequest {
+  string title = 1;
+  string teacher_code = 2;
+  RoleType role = 3;
+  string semester_code = 4;
+  bool activate = 5;
+  string created_by = 6;
+}
+
+message CreateRoleSystemResponse {
+  RoleSystem role_system = 1;
+}
+
+message GetRoleSystemRequest {
+  string id = 1;
+}
+
+message GetRoleSystemResponse {
+  RoleSystem role_system = 1;
+}
+
+message UpdateRoleSystemRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string teacher_code = 3;
+  optional RoleType role = 4;
+  optional string semester_code = 5;
+  optional bool activate = 6;
+  string updated_by = 7;
+}
+
+message UpdateRoleSystemResponse {
+  RoleSystem role_system = 1;
+}
+
+message DeleteRoleSystemRequest {
+  string id = 1;
+}
+
+message DeleteRoleSystemResponse {
+  bool success = 1;
+}
+
+message ListRoleSystemsRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListRoleSystemsResponse {
+  repeated RoleSystem role_systems = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Service =============
+service RoleService {
+  rpc CreateRoleSystem(CreateRoleSystemRequest) returns (CreateRoleSystemResponse);
+  rpc GetRoleSystem(GetRoleSystemRequest) returns (GetRoleSystemResponse);
+  rpc UpdateRoleSystem(UpdateRoleSystemRequest) returns (UpdateRoleSystemResponse);
+  rpc DeleteRoleSystem(DeleteRoleSystemRequest) returns (DeleteRoleSystemResponse);
+  rpc ListRoleSystems(ListRoleSystemsRequest) returns (ListRoleSystemsResponse);
+}

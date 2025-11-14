@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed assets/*
@@ -17,6 +18,7 @@ func copyTemplates() error {
 	templates := []string{
 		"crud_handler.tmpl",
 		"dockerfile.tmpl",
+		"docker-compose.tmpl",
 		"entity_handler.tmpl",
 		"env.tmpl",
 		"handler.tmpl",
@@ -32,6 +34,96 @@ func copyTemplates() error {
 		if err := os.WriteFile(filepath.Join("template", tmpl), data, 0644); err != nil {
 			return fmt.Errorf("failed to write template %s: %w", tmpl, err)
 		}
+	}
+
+	return nil
+}
+
+// copyPkgFiles copies pkg directory from assets/template/pkg to src/service/pkg
+// and replaces hardcoded module paths with actual module path
+func copyPkgFiles() error {
+	srcPath := "assets/template/pkg"
+	dstPath := filepath.Join("src", "service", "pkg")
+
+	// Get module path from go.mod
+	modulePath, err := getModulePath()
+	if err != nil {
+		return fmt.Errorf("failed to get module path: %w", err)
+	}
+
+	// Copy directory with path replacement
+	return copyEmbedDirWithReplace(srcPath, dstPath, map[string]string{
+		"thaily/proto/common": modulePath + "/proto/common",
+	})
+}
+
+// getModulePath reads module path from go.mod
+func getModulePath() (string, error) {
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		return "", err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+
+	return "", fmt.Errorf("module path not found in go.mod")
+}
+
+// copyEmbedDirWithReplace copies embedded directory and replaces strings in files
+func copyEmbedDirWithReplace(srcPath, dstPath string, replacements map[string]string) error {
+	return fs.WalkDir(assetsFS, srcPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if path == srcPath {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(srcPath, path)
+		if err != nil {
+			return err
+		}
+
+		dstFilePath := filepath.Join(dstPath, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(dstFilePath, 0755)
+		}
+
+		// Read file
+		data, err := assetsFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		// Replace strings in .go files
+		if strings.HasSuffix(path, ".go") {
+			content := string(data)
+			for old, new := range replacements {
+				content = strings.ReplaceAll(content, old, new)
+			}
+			data = []byte(content)
+		}
+
+		return os.WriteFile(dstFilePath, data, 0644)
+	})
+}
+
+// copyCertsSetup copies CERTS_SETUP.md from assets
+func copyCertsSetup() error {
+	data, err := assetsFS.ReadFile("assets/template/CERTS_SETUP.md")
+	if err != nil {
+		return fmt.Errorf("failed to read CERTS_SETUP.md: %w", err)
+	}
+
+	if err := os.WriteFile("CERTS_SETUP.md", data, 0644); err != nil {
+		return fmt.Errorf("failed to write CERTS_SETUP.md: %w", err)
 	}
 
 	return nil

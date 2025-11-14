@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 	pb "{{.PackagePath}}"
-	"{{.ModulePath}}/src/pkg/helper"
-	"{{.ModulePath}}/src/pkg/logger"
+	"{{.ModulePath}}/src/service/pkg/helper"
+	"{{.ModulePath}}/src/service/pkg/logger"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -136,10 +136,10 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 	}
 	if createdBy.Valid {
-		entity.CreatedBy = &createdBy.String
+		entity.CreatedBy = createdBy.String
 	}
 	if updatedBy.Valid {
-		entity.UpdatedBy = &updatedBy.String
+		entity.UpdatedBy = updatedBy.String
 	}
 
 	return &pb.{{.ResponseType}}{
@@ -363,10 +363,10 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 			entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 		}
 		if createdBy.Valid {
-			entity.CreatedBy = &createdBy.String
+			entity.CreatedBy = createdBy.String
 		}
 		if updatedBy.Valid {
-			entity.UpdatedBy = &updatedBy.String
+			entity.UpdatedBy = updatedBy.String
 		}
 
 		entities = append(entities, &entity)

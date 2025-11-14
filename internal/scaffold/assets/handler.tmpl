@@ -3,9 +3,8 @@ package handler
 import (
 	"context"
 	"database/sql"
-	
+
 	pb "{{.PackagePath}}"
-	"{{.ModulePath}}/src/pkg/database"
 )
 
 type Handler struct {
@@ -13,10 +12,8 @@ type Handler struct {
 	db *sql.DB
 }
 
-func NewHandler() *Handler {
-	return &Handler{
-		db: database.DB,
-	}
+func NewHandler(db *sql.DB) *Handler {
+	return &Handler{db: db}
 }
 
 func (h *Handler) queryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {

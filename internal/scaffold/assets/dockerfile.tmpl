@@ -1,3 +1,4 @@
+# Build stage
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
@@ -10,24 +11,23 @@ RUN go mod download
 COPY . .
 
 # Build the service
-RUN CGO_ENABLED=0 GOOS=linux go build -o /{{.ProtoName}}-service ./src/service/{{.ProtoName}}
+RUN CGO_ENABLED=0 GOOS=linux go build -o {{.ProtoName}}-service ./src/service/{{.ProtoName}}
 
-# Final stage
+# Runtime stage
 FROM alpine:latest
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS
+# Install ca-certificates for TLS
 RUN apk --no-cache add ca-certificates
 
 # Copy binary from builder
-COPY --from=builder /{{.ProtoName}}-service .
+COPY --from=builder /app/{{.ProtoName}}-service .
 
-# Create env directory and copy env file
-RUN mkdir -p env
-COPY env/{{.ProtoName}}.env env/{{.ProtoName}}.env
+# Create directories for mounted volumes
+RUN mkdir -p /app/service /app/logs
 
-# Expose port
+# Expose service port
 EXPOSE {{.Port}}
 
 # Run the service

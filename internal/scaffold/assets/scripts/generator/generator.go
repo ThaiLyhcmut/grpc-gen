@@ -298,7 +298,62 @@ func GenerateDockerfile(protoName string, data types.Data) {
 		log.Fatal(err)
 	}
 
-	filename := filepath.Join("docker", protoName+".Dockerfile")
+	filename := filepath.Join("src", "service", protoName, "Dockerfile")
+	out, err := os.Create(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer out.Close()
+
+	if err := tmpl.Execute(out, data); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Generated %s\n", filename)
+}
+
+// GenerateDockerCompose creates docker-compose.yml from template
+func GenerateDockerCompose(protoName string, data types.Data) {
+	tmpl, err := template.ParseFiles("template/docker-compose.tmpl")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	filename := filepath.Join("src", "service", protoName, "docker-compose.yml")
+	out, err := os.Create(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer out.Close()
+
+	if err := tmpl.Execute(out, data); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Generated %s\n", filename)
+}
+
+// GenerateGitignore creates .gitignore from template
+func GenerateGitignore(protoName string) {
+	content := `log/
+*.log
+`
+	filename := filepath.Join("src", "service", protoName, ".gitignore")
+	if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Generated %s\n", filename)
+}
+
+// GenerateServiceEnvFile creates service-level .env file
+func GenerateServiceEnvFile(protoName string, data types.Data) {
+	tmpl, err := template.ParseFiles("template/env.tmpl")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	filename := filepath.Join("src", "service", protoName, protoName+".env")
 	out, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err)

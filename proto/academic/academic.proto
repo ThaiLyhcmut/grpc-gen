@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package academic;
+
+option go_package = "./academic";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// ============= Semester =============
+message Semester {
+  string id = 1;
+  string title = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  string created_by = 5;
+  string updated_by = 6;
+}
+
+message CreateSemesterRequest {
+  string title = 1;
+  string created_by = 2;
+}
+
+message CreateSemesterResponse {
+  Semester semester = 1;
+}
+
+message GetSemesterRequest {
+  string id = 1;
+}
+
+message GetSemesterResponse {
+  Semester semester = 1;
+}
+
+message UpdateSemesterRequest {
+  string id = 1;
+  optional string title = 2;
+  string updated_by = 3;
+}
+
+message UpdateSemesterResponse {
+  Semester semester = 1;
+}
+
+message DeleteSemesterRequest {
+  string id = 1;
+}
+
+message DeleteSemesterResponse {
+  bool success = 1;
+}
+
+message ListSemestersRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListSemestersResponse {
+  repeated Semester semesters = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ============= Faculty =============
+message Faculty {
+  string id = 1;
+  string title = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  string created_by = 5;
+  string updated_by = 6;
+}
+
+message CreateFacultyRequest {
+  string title = 1;
+  string created_by = 5;
+}
+
+message CreateFacultyResponse {
+  Faculty faculty = 1;
+}
+
+message GetFacultyRequest {
+  string id = 1;
+}
+
+message GetFacultyResponse {
+  Faculty faculty = 1;
+}
+
+message UpdateFacultyRequest {
+  string id = 1;
+  optional string title = 2;
+  string updated_by = 3;
+}
+
+message UpdateFacultyResponse {
+  Faculty faculty = 1;
+}
+
+message DeleteFacultyRequest {
+  string id = 1;
+}
+
+message DeleteFacultyResponse {
+  bool success = 1;
+}
+
+message ListFacultiesRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListFacultiesResponse {
+  repeated Faculty faculties = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+
+// ============= Major =============
+message Major {
+  string id = 1;
+  string title = 2;
+  string faculty_code = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  string created_by = 6;
+  string updated_by = 7;
+}
+
+message CreateMajorRequest {
+  string title = 1;
+  string faculty_code = 2;
+  string created_by = 3;
+}
+
+message CreateMajorResponse {
+  Major major = 1;
+}
+
+message GetMajorRequest {
+  string id = 1;
+}
+
+message GetMajorResponse {
+  Major major = 1;
+}
+
+message UpdateMajorRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string faculty_code = 3;
+  string updated_by = 4;
+}
+
+message UpdateMajorResponse {
+  Major major = 1;
+}
+
+message DeleteMajorRequest {
+  string id = 1;
+}
+
+message DeleteMajorResponse {
+  bool success = 1;
+}
+
+message ListMajorsRequest {
+  common.SearchRequest search = 1;
+}
+
+message ListMajorsResponse {
+  repeated Major majors = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+
+// ============= Service =============
+service AcademicService {
+  // Semester
+  rpc CreateSemester(CreateSemesterRequest) returns (CreateSemesterResponse);
+  rpc GetSemester(GetSemesterRequest) returns (GetSemesterResponse);
+  rpc UpdateSemester(UpdateSemesterRequest) returns (UpdateSemesterResponse);
+  rpc DeleteSemester(DeleteSemesterRequest) returns (DeleteSemesterResponse);
+  rpc ListSemesters(ListSemestersRequest) returns (ListSemestersResponse);
+
+  // Faculty
+  rpc CreateFaculty(CreateFacultyRequest) returns (CreateFacultyResponse);
+  rpc GetFaculty(GetFacultyRequest) returns (GetFacultyResponse);
+  rpc UpdateFaculty(UpdateFacultyRequest) returns (UpdateFacultyResponse);
+  rpc DeleteFaculty(DeleteFacultyRequest) returns (DeleteFacultyResponse);
+  rpc ListFaculties(ListFacultiesRequest) returns (ListFacultiesResponse);
+
+  // Major
+  rpc CreateMajor(CreateMajorRequest) returns (CreateMajorResponse);
+  rpc GetMajor(GetMajorRequest) returns (GetMajorResponse);
+  rpc UpdateMajor(UpdateMajorRequest) returns (UpdateMajorResponse);
+  rpc DeleteMajor(DeleteMajorRequest) returns (DeleteMajorResponse);
+  rpc ListMajors(ListMajorsRequest) returns (ListMajorsResponse);
+}

@@ -13,11 +13,8 @@ func CreateProject(projectName, modulePath string) error {
 	dirs := []string{
 		"proto/common",
 		"src/service",
-		"src/pkg/database",
-		"src/pkg/logger",
-		"src/pkg/helper",
-		"env",
-		"docker",
+		"src/service/pkg",
+		"logs",
 		"scripts/types",
 		"scripts/parser",
 		"scripts/generator",
@@ -45,11 +42,17 @@ func CreateProject(projectName, modulePath string) error {
 	}
 	fmt.Println("  ✓ Created common.proto")
 
-	// Create pkg files
-	if err := createPkgFiles(modulePath); err != nil {
+	// Copy pkg files from template
+	if err := copyPkgFiles(); err != nil {
 		return err
 	}
-	fmt.Println("  ✓ Created pkg utilities")
+	fmt.Println("  ✓ Copied pkg utilities")
+
+	// Copy CERTS_SETUP.md
+	if err := copyCertsSetup(); err != nil {
+		return err
+	}
+	fmt.Println("  ✓ Copied CERTS_SETUP.md")
 
 	// Copy templates
 	if err := copyTemplates(); err != nil {
@@ -92,9 +95,9 @@ go 1.24
 require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	google.golang.org/grpc v1.62.0
-	google.golang.org/protobuf v1.32.0
-	github.com/go-sql-driver/mysql v1.7.1
+	google.golang.org/grpc v1.70.0
+	google.golang.org/protobuf v1.36.1
+	github.com/go-sql-driver/mysql v1.8.1
 )
 `, modulePath)
 
