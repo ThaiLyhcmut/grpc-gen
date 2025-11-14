@@ -134,6 +134,21 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		}
 	}
 
+	// Get optional entity fields
+	optionalEntityFields := []string{}
+	if optFields, ok := optionalEntityFieldsMap[entityName]; ok {
+		optionalEntityFields = optFields
+	}
+
+	// Create a map for quick lookup of optional entity fields
+	optionalEntityFieldsSet := make(map[string]bool)
+	for _, fieldName := range optionalEntityFields {
+		optionalEntityFieldsSet[fieldName] = true
+	}
+
+	// Build optional entity fields data for template
+	optionalEntityFieldsData := []types.Field{}
+
 	// Build scan fields list (start with id)
 	scanFields = append(scanFields, "entity.Id")
 	for _, field := range fields {
@@ -142,7 +157,14 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		} else if field.IsTimestamp {
 			continue
 		} else {
-			scanFields = append(scanFields, "entity."+field.GoName)
+			// Check if this field is optional in the entity
+			if optionalEntityFieldsSet[field.DBField] {
+				// Use NullString/NullInt32 variable for optional entity fields
+				scanFields = append(scanFields, field.GoName+"Null")
+				optionalEntityFieldsData = append(optionalEntityFieldsData, field)
+			} else {
+				scanFields = append(scanFields, "entity."+field.GoName)
+			}
 		}
 	}
 
@@ -160,12 +182,6 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 
 	selectFields = append([]string{"id"}, createFieldNames...)
 	selectFields = append(selectFields, "created_at", "updated_at", "created_by", "updated_by")
-
-	// Get optional entity fields
-	optionalEntityFields := []string{}
-	if optFields, ok := optionalEntityFieldsMap[entityName]; ok {
-		optionalEntityFields = optFields
-	}
 
 	// Get optional update fields
 	optionalUpdateFields := []string{}
@@ -208,10 +224,11 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		CreateFieldsSQL:      strings.Join(createFieldNames, ", "),
 		CreatePlaceholders:   strings.Join(createPlaceholders, ", "),
 		UpdateFields:         updateFields,
-		SelectFieldsSQL:      strings.Join(selectFields, ", "),
-		ScanFields:           scanFields,
-		OptionalEntityFields: optionalEntityFields,
-		OptionalUpdateFields: optionalUpdateFields,
+		SelectFieldsSQL:         strings.Join(selectFields, ", "),
+		ScanFields:              scanFields,
+		OptionalEntityFields:    optionalEntityFields,
+		OptionalEntityFieldsData: optionalEntityFieldsData,
+		OptionalUpdateFields:    optionalUpdateFields,
 		IsCreatedByOptional:  isCreatedByOptional,
 		IsUpdatedByOptional:  isUpdatedByOptional,
 	}

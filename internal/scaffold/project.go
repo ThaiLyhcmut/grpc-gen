@@ -54,6 +54,12 @@ func CreateProject(projectName, modulePath string) error {
 	}
 	fmt.Println("  ✓ Copied CERTS_SETUP.md")
 
+	// Copy generate-certs.sh script
+	if err := copyGenerateCertsScript(); err != nil {
+		return err
+	}
+	fmt.Println("  ✓ Copied generate-certs.sh")
+
 	// Copy templates
 	if err := copyTemplates(); err != nil {
 		return err

@@ -57,9 +57,10 @@ type CRUDHandlerData struct {
 	CreatePlaceholders   string
 	UpdateFields         []Field
 	SelectFieldsSQL      string
-	ScanFields           []string
-	OptionalEntityFields []string // Optional fields in entity (created_by, updated_by, etc)
-	OptionalUpdateFields []string // Optional fields in UpdateRequest
-	IsCreatedByOptional  bool     // Whether created_by is optional in CreateRequest
-	IsUpdatedByOptional  bool     // Whether updated_by is optional in UpdateRequest
+	ScanFields              []string
+	OptionalEntityFields    []string // Optional field names in entity (created_by, updated_by, etc)
+	OptionalEntityFieldsData []Field  // Optional entity fields with full metadata for scanning
+	OptionalUpdateFields    []string // Optional fields in UpdateRequest
+	IsCreatedByOptional     bool     // Whether created_by is optional in CreateRequest
+	IsUpdatedByOptional     bool     // Whether updated_by is optional in UpdateRequest
 }

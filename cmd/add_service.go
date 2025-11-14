@@ -40,8 +40,9 @@ Example:
 		fmt.Printf("\n✅ Service added successfully!\n\n")
 		fmt.Println("Next steps:")
 		fmt.Printf("  1. Edit proto/%s/%s.proto to define your entities\n", serviceName, serviceName)
-		fmt.Printf("  2. make gen-%s\n", serviceName)
-		fmt.Printf("  3. go build ./src/service/%s\n", serviceName)
+		fmt.Printf("  2. ./generate-certs.sh %s          # Generate TLS certificates\n", serviceName)
+		fmt.Printf("  3. make gen-%s\n", serviceName)
+		fmt.Printf("  4. go build ./src/service/%s\n", serviceName)
 		fmt.Println()
 
 		return nil

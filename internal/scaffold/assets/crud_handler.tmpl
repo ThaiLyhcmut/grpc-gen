@@ -105,7 +105,11 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	var createdAt, updatedAt sql.NullTime
 	var createdBy, updatedBy sql.NullString
 	{{range $.EnumFields}}var {{.GoName}}Str string
-	{{end}}
+	{{end}}{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}var {{.GoName}}Null sql.NullString
+	{{else if eq .Type "int32"}}var {{.GoName}}Null sql.NullInt32
+	{{else if eq .Type "int64"}}var {{.GoName}}Null sql.NullInt64
+	{{else if eq .Type "bool"}}var {{.GoName}}Null sql.NullBool
+	{{end}}{{end}}
 	err := h.queryRow(ctx, query, req.Id).Scan(
 		{{range $.ScanFields}}&{{.}},
 		{{end}}&createdAt,
@@ -141,6 +145,23 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	if updatedBy.Valid {
 		entity.UpdatedBy = updatedBy.String
 	}
+	{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}if {{.GoName}}Null.Valid {
+		val := {{.GoName}}Null.String
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "int32"}}if {{.GoName}}Null.Valid {
+		val := {{.GoName}}Null.Int32
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "int64"}}if {{.GoName}}Null.Valid {
+		val := {{.GoName}}Null.Int64
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "bool"}}if {{.GoName}}Null.Valid {
+		val := {{.GoName}}Null.Bool
+		entity.{{.GoName}} = &val
+	}
+	{{end}}{{end}}
 
 	return &pb.{{.ResponseType}}{
 		{{$.EntityName}}: &entity,
@@ -336,7 +357,11 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		var createdAt, updatedAt sql.NullTime
 		var createdBy, updatedBy sql.NullString
 		{{range $.EnumFields}}var {{.GoName}}Str string
-		{{end}}
+		{{end}}{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}var {{.GoName}}Null sql.NullString
+		{{else if eq .Type "int32"}}var {{.GoName}}Null sql.NullInt32
+		{{else if eq .Type "int64"}}var {{.GoName}}Null sql.NullInt64
+		{{else if eq .Type "bool"}}var {{.GoName}}Null sql.NullBool
+		{{end}}{{end}}
 		err := rows.Scan(
 			{{range $.ScanFields}}&{{.}},
 			{{end}}&createdAt,
@@ -368,6 +393,23 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		if updatedBy.Valid {
 			entity.UpdatedBy = updatedBy.String
 		}
+		{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}if {{.GoName}}Null.Valid {
+			val := {{.GoName}}Null.String
+			entity.{{.GoName}} = &val
+		}
+		{{else if eq .Type "int32"}}if {{.GoName}}Null.Valid {
+			val := {{.GoName}}Null.Int32
+			entity.{{.GoName}} = &val
+		}
+		{{else if eq .Type "int64"}}if {{.GoName}}Null.Valid {
+			val := {{.GoName}}Null.Int64
+			entity.{{.GoName}} = &val
+		}
+		{{else if eq .Type "bool"}}if {{.GoName}}Null.Valid {
+			val := {{.GoName}}Null.Bool
+			entity.{{.GoName}} = &val
+		}
+		{{end}}{{end}}
 
 		entities = append(entities, &entity)
 	}

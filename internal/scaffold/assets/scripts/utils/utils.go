@@ -15,14 +15,25 @@ func ToSnakeCase(s string) string {
 }
 
 // ToCamelCase converts snake_case to CamelCase
+// Special handling: numeric parts keep underscore (e.g., percent_stage_1 -> PercentStage_1)
 func ToCamelCase(s string) string {
 	parts := strings.Split(s, "_")
+	var result strings.Builder
+
 	for i := range parts {
 		if len(parts[i]) > 0 {
-			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			// Check if this part is numeric (starts with a digit)
+			if parts[i][0] >= '0' && parts[i][0] <= '9' {
+				// Keep underscore before numeric parts
+				result.WriteRune('_')
+				result.WriteString(parts[i])
+			} else {
+				// Capitalize non-numeric parts
+				result.WriteString(strings.ToUpper(parts[i][:1]) + parts[i][1:])
+			}
 		}
 	}
-	return strings.Join(parts, "")
+	return result.String()
 }
 
 // NormalizePlural converts plural entity names to singular

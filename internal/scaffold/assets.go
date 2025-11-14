@@ -129,6 +129,20 @@ func copyCertsSetup() error {
 	return nil
 }
 
+// copyGenerateCertsScript copies generate-certs.sh script from assets
+func copyGenerateCertsScript() error {
+	data, err := assetsFS.ReadFile("assets/template/generate-certs.sh")
+	if err != nil {
+		return fmt.Errorf("failed to read generate-certs.sh: %w", err)
+	}
+
+	if err := os.WriteFile("generate-certs.sh", data, 0755); err != nil {
+		return fmt.Errorf("failed to write generate-certs.sh: %w", err)
+	}
+
+	return nil
+}
+
 func copyGeneratorScripts() error {
 	// Copy all scripts directories
 	scriptDirs := []string{"types", "parser", "generator", "utils"}
