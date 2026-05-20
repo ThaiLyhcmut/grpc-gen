@@ -11,8 +11,8 @@ import (
 	"{{.ModulePath}}/src/service/pkg/helper"
 	"{{.ModulePath}}/src/service/pkg/logger"
 
-	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
+	{{if eq $.IDType "string"}}"github.com/google/uuid"
+	{{end}}"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -126,7 +126,15 @@ func build{{$.EntityName}}Where(filters []*commonpb.FilterCriteria) (string, []i
 
 {{range .Methods}}
 {{if eq .Name (printf "Create%s" $.EntityName)}}
-// Create{{$.EntityName}} creates a new {{$.EntityName}} record
+// Create{{$.EntityName}} creates a new {{$.EntityName}} record.
+//
+// ID handling depends on the entity's `id` type and whether CreateRequest
+// declares an `optional id` field:
+//   - string id: if client supplies a non-empty value, use it; otherwise the
+//     server generates a UUID. Useful for slug-style IDs (e.g. "tin-tuc-foo").
+//   - integer id (int32/int64/uint32/uint64): if client supplies a non-zero
+//     value, use it; otherwise the column is left to MySQL AUTO_INCREMENT
+//     and the inserted ID is recovered via LastInsertId().
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
@@ -135,7 +143,21 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		return nil, status.Error(codes.InvalidArgument, "{{.ProtoName}} is required")
 	}
 	{{end}}{{end}}
-	id := uuid.New().String()
+	// === ID handling ===
+	{{if eq $.IDType "string"}}
+	id := {{if $.CreateAllowsID}}req.GetId(){{else}}""{{end}}
+	if id == "" {
+		id = uuid.New().String()
+	}
+	{{else}}
+	var id {{$.IDType}}
+	{{if $.CreateAllowsID}}id = req.GetId()
+	{{end}}var idArg interface{}
+	if id != 0 {
+		idArg = id
+	}
+	// idArg == nil → MySQL uses AUTO_INCREMENT and we read it back below.
+	{{end}}
 
 	// Prepare fields. Use interface{} so nil propagates as SQL NULL rather than
 	// silently becoming the zero value of the Go type (would lose presence info).
@@ -176,9 +198,10 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		VALUES (?, {{$.CreatePlaceholders}}, ?, NOW(), NOW())
 	`
 
-	_, err := h.execQuery(ctx, query,
-		id,
-		{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
+	result, err := h.execQuery(ctx, query,
+		{{if eq $.IDType "string"}}id,
+		{{else}}idArg,
+		{{end}}{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
 		{{else if and .IsOptional (eq .Type "[]byte")}}req.{{.GoName}},
 		{{else if .IsOptional}}{{.GoName}},
 		{{else if .IsTimestamp}}req.{{.GoName}}.AsTime(),
@@ -192,7 +215,18 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		}
 		return nil, status.Errorf(codes.Internal, "failed to create {{$.EntityName | lower}}: %v", err)
 	}
-
+	{{if ne $.IDType "string"}}
+	// Recover AUTO_INCREMENT value when the caller didn't supply an id.
+	if id == 0 {
+		insertedID, err := result.LastInsertId()
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to read inserted id: %v", err)
+		}
+		id = {{$.IDType}}(insertedID)
+	}
+	{{else}}
+	_ = result // string id: known up-front, no LastInsertId() needed
+	{{end}}
 	// Inline SELECT to return the created entity (replaces previous h.Get{{$.EntityName}} call).
 	selectQuery := `
 		SELECT {{$.SelectFieldsSQL}}

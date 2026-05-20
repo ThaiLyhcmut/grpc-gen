@@ -44,8 +44,8 @@ func main() {
 	// Group methods by entity
 	entityMethods := parser.GroupMethodsByEntity(methods)
 
-	// Parse entity messages to get field information + blocked system fields
-	entityFields, blockedSystemFields, err := parser.ParseEntityFields(protoFile, enums)
+	// Parse entity messages: fields, blocked system fields, entity ID types.
+	entityFields, blockedSystemFields, entityIDTypes, err := parser.ParseEntityFields(protoFile, enums)
 	if err != nil {
 		log.Fatalf("Failed to parse entity fields: %v", err)
 	}
@@ -99,7 +99,7 @@ func main() {
 	for entityName, methods := range entityMethods {
 		if parser.IsCRUDEntity(methods) {
 			// Generate full CRUD handler
-			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, optionalEntityFieldsMap, optionalUpdateFieldsMap, allUpdateFieldsMap, blockedSystemFields[entityName], modulePath)
+			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, optionalEntityFieldsMap, optionalUpdateFieldsMap, allUpdateFieldsMap, blockedSystemFields[entityName], entityIDTypes[entityName], modulePath)
 		} else {
 			// Generate simple entity handler
 			generator.GenerateEntityHandler(handlerDir, types.EntityHandlerData{

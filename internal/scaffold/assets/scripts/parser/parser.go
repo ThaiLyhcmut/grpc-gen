@@ -285,17 +285,20 @@ func ParseEntityOptionalFields(filename string) (map[string][]string, error) {
 //   - entityFields: per-entity list of non-system fields (used for scan/CRUD)
 //   - blockedSystemFields: per-entity set of system fields explicitly marked
 //     `[(common.filterable) = false]` so the generator can subtract them from
-//     the system-field filter defaults. System fields are still skipped from
-//     scan logic, but their filterability is now configurable.
-func ParseEntityFields(filename string, enums map[string][]string) (map[string][]types.Field, map[string]map[string]bool, error) {
+//     the system-field filter defaults.
+//   - entityIDTypes: per-entity Go type of the `id` field (e.g. "string",
+//     "int64"). Lets the template/generator pick the right ID strategy
+//     (UUID for string, DB auto-increment for int).
+func ParseEntityFields(filename string, enums map[string][]string) (map[string][]types.Field, map[string]map[string]bool, map[string]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer file.Close()
 
 	entityFields := make(map[string][]types.Field)
 	blockedSystemFields := make(map[string]map[string]bool)
+	entityIDTypes := make(map[string]string)
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+(\w+)\s*\{`)
@@ -345,9 +348,15 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 				// System fields are skipped from regular field iteration (scan logic
 				// handles them separately) BUT we still parse the annotation so the
 				// generator can know if the user wants to block them from filter.
+				// For `id` specifically we also record its Go type so the Create
+				// handler knows whether to gen a UUID (string) or rely on DB
+				// auto-increment (int*).
 				if systemFieldNames[fieldName] {
 					if m := filterableAnnotRegex.FindStringSubmatch(annotations); len(m) == 2 && m[1] == "false" {
 						blockedSystemFields[currentMessage][fieldName] = true
+					}
+					if fieldName == "id" {
+						entityIDTypes[currentMessage] = normalizeProtoType(fieldType)
 					}
 					continue
 				}
@@ -392,7 +401,7 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 		}
 	}
 
-	return entityFields, blockedSystemFields, scanner.Err()
+	return entityFields, blockedSystemFields, entityIDTypes, scanner.Err()
 }
 
 // GroupMethodsByEntity groups RPC methods by their entity name

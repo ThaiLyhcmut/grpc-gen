@@ -87,9 +87,13 @@ enum {Entity}Status {
 }
 
 message Create{Entity}Request {
-  string name = 1;
-  {Entity}Status status = 2;
-  string created_by = 3;
+  // Optional client-supplied id. Empty/omitted → server generates a UUID
+  // (string id) or uses MySQL AUTO_INCREMENT (integer id). Change the
+  // entity id type (e.g. to int64) to switch ID strategy.
+  optional string id = 1;
+  string name = 2;
+  {Entity}Status status = 3;
+  string created_by = 4;
 }
 
 message Create{Entity}Response {

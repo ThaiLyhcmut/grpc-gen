@@ -87,7 +87,7 @@ func GenerateEntityHandler(handlerDir string, data types.EntityHandlerData) {
 }
 
 // GenerateCRUDHandler creates a full CRUD handler from template
-func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, allUpdateFieldsMap map[string][]string, blockedSystemFields map[string]bool, modulePath string) {
+func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, allUpdateFieldsMap map[string][]string, blockedSystemFields map[string]bool, idType string, modulePath string) {
 	// Prepare data for template
 	requiredFields := []types.Field{}
 	optionalFields := []types.Field{}
@@ -253,6 +253,22 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		}
 	}
 
+	// Detect whether CreateRequest accepts a user-supplied id. We treat
+	// `optional id` as "user may supply, else server generates".
+	createAllowsID := false
+	for _, n := range optionalFieldsMap[entityName] {
+		if n == "id" {
+			createAllowsID = true
+			break
+		}
+	}
+
+	// Default the ID type to "string" so existing services (no explicit ID
+	// type tracked) keep their UUID behaviour.
+	if idType == "" {
+		idType = "string"
+	}
+
 	data := types.CRUDHandlerData{
 		ModulePath:           modulePath,
 		PackagePath:          packagePath,
@@ -276,6 +292,8 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		TimestampFields:         timestampFields,
 		IsCreatedByOptional:  isCreatedByOptional,
 		IsUpdatedByOptional:  isUpdatedByOptional,
+		IDType:               idType,
+		CreateAllowsID:       createAllowsID,
 	}
 
 	// Create template with custom functions

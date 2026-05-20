@@ -65,4 +65,6 @@ type CRUDHandlerData struct {
 	TimestampFields         []Field  // Custom timestamp fields (like due_date, not created_at/updated_at)
 	IsCreatedByOptional     bool     // Whether created_by is optional in CreateRequest
 	IsUpdatedByOptional     bool     // Whether updated_by is optional in UpdateRequest
+	IDType                  string   // Go type of entity.id ("string", "int32", "int64", "uint32", "uint64"). Empty = entity has no id.
+	CreateAllowsID          bool     // True if CreateRequest has `id` as optional field (user may supply, else server gens)
 }
