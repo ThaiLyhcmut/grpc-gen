@@ -1,0 +1,212 @@
+syntax = "proto3";
+
+package lesson;
+
+option go_package = "github.com/thaily/lms/proto/lesson";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// =====================================================================
+// 1. Lesson
+// =====================================================================
+message Lesson {
+  uint64 id = 1;
+  uint64 class_id = 2;
+  string title = 3;
+  optional string description = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  LessonMode mode = 7;
+  optional string location = 8;
+  optional string meeting_url = 9;
+  LessonStatus status = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  optional string created_by = 13;
+  optional string updated_by = 14;
+}
+
+enum LessonMode {
+  LESSON_MODE_UNSPECIFIED = 0;
+  OFFLINE = 1;
+  ONLINE = 2;
+  HYBRID = 3;
+}
+
+enum LessonStatus {
+  LESSON_STATUS_UNSPECIFIED = 0;
+  SCHEDULED = 1;
+  ONGOING = 2;
+  DONE = 3;
+  CANCELLED = 4;
+}
+
+message CreateLessonRequest {
+  optional uint64 id = 1;
+  uint64 class_id = 2;
+  string title = 3;
+  optional string description = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  LessonMode mode = 7;
+  optional string location = 8;
+  optional string meeting_url = 9;
+  LessonStatus status = 10;
+  string created_by = 11;
+}
+message CreateLessonResponse { Lesson lesson = 1; }
+
+message UpdateLessonRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional google.protobuf.Timestamp start_at = 4;
+  optional google.protobuf.Timestamp end_at = 5;
+  optional LessonMode mode = 6;
+  optional string location = 7;
+  optional string meeting_url = 8;
+  optional LessonStatus status = 9;
+  string updated_by = 10;
+}
+message UpdateLessonResponse { repeated Lesson lesson = 1; int32 affected_count = 2; }
+
+message DeleteLessonRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteLessonResponse { int32 affected_count = 1; }
+
+message ListLessonRequest { common.SearchRequest search = 1; }
+message ListLessonResponse { repeated Lesson lesson = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 2. LessonVideo
+// =====================================================================
+message LessonVideo {
+  uint64 id = 1;
+  uint64 lesson_id = 2;
+  string title = 3;
+  string storage_key = 4;
+  optional int32 duration_sec = 5;
+  optional int64 size_bytes = 6;
+  optional string mime_type = 7;
+  optional string thumbnail_key = 8;
+  VideoStatus status = 9;
+  optional google.protobuf.Timestamp uploaded_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  optional string created_by = 13;
+  optional string updated_by = 14;
+}
+
+enum VideoStatus {
+  VIDEO_STATUS_UNSPECIFIED = 0;
+  UPLOADING = 1;
+  PROCESSING = 2;
+  READY = 3;
+  FAILED = 4;
+}
+
+message CreateLessonVideoRequest {
+  optional uint64 id = 1;
+  uint64 lesson_id = 2;
+  string title = 3;
+  string storage_key = 4;
+  optional int32 duration_sec = 5;
+  optional int64 size_bytes = 6;
+  optional string mime_type = 7;
+  optional string thumbnail_key = 8;
+  VideoStatus status = 9;
+  optional google.protobuf.Timestamp uploaded_at = 10;
+  string created_by = 11;
+}
+message CreateLessonVideoResponse { LessonVideo lesson_video = 1; }
+
+message UpdateLessonVideoRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string title = 2;
+  optional int32 duration_sec = 3;
+  optional int64 size_bytes = 4;
+  optional string mime_type = 5;
+  optional string thumbnail_key = 6;
+  optional VideoStatus status = 7;
+  optional google.protobuf.Timestamp uploaded_at = 8;
+  string updated_by = 9;
+}
+message UpdateLessonVideoResponse { repeated LessonVideo lesson_video = 1; int32 affected_count = 2; }
+
+message DeleteLessonVideoRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteLessonVideoResponse { int32 affected_count = 1; }
+
+message ListLessonVideoRequest { common.SearchRequest search = 1; }
+message ListLessonVideoResponse { repeated LessonVideo lesson_video = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 3. LessonAttendance (surrogate id)
+// =====================================================================
+message LessonAttendance {
+  uint64 id = 1;
+  uint64 lesson_id = 2;
+  uint64 student_id = 3;
+  AttendanceStatus status = 4;
+  optional string note = 5;
+  uint64 marked_by_teacher_id = 6;
+  google.protobuf.Timestamp marked_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  optional string created_by = 10;
+  optional string updated_by = 11;
+}
+
+enum AttendanceStatus {
+  ATTENDANCE_STATUS_UNSPECIFIED = 0;
+  PRESENT = 1;
+  ABSENT = 2;
+  LATE = 3;
+  EXCUSED = 4;
+}
+
+message CreateLessonAttendanceRequest {
+  optional uint64 id = 1;
+  uint64 lesson_id = 2;
+  uint64 student_id = 3;
+  AttendanceStatus status = 4;
+  optional string note = 5;
+  uint64 marked_by_teacher_id = 6;
+  google.protobuf.Timestamp marked_at = 7;
+  string created_by = 8;
+}
+message CreateLessonAttendanceResponse { LessonAttendance lesson_attendance = 1; }
+
+message UpdateLessonAttendanceRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional AttendanceStatus status = 2;
+  optional string note = 3;
+  optional google.protobuf.Timestamp marked_at = 4;
+  string updated_by = 5;
+}
+message UpdateLessonAttendanceResponse { repeated LessonAttendance lesson_attendance = 1; int32 affected_count = 2; }
+
+message DeleteLessonAttendanceRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteLessonAttendanceResponse { int32 affected_count = 1; }
+
+message ListLessonAttendanceRequest { common.SearchRequest search = 1; }
+message ListLessonAttendanceResponse { repeated LessonAttendance lesson_attendance = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// Service
+// =====================================================================
+service LessonService {
+  rpc CreateLesson(CreateLessonRequest) returns (CreateLessonResponse);
+  rpc UpdateLesson(UpdateLessonRequest) returns (UpdateLessonResponse);
+  rpc DeleteLesson(DeleteLessonRequest) returns (DeleteLessonResponse);
+  rpc ListLesson(ListLessonRequest) returns (ListLessonResponse);
+
+  rpc CreateLessonVideo(CreateLessonVideoRequest) returns (CreateLessonVideoResponse);
+  rpc UpdateLessonVideo(UpdateLessonVideoRequest) returns (UpdateLessonVideoResponse);
+  rpc DeleteLessonVideo(DeleteLessonVideoRequest) returns (DeleteLessonVideoResponse);
+  rpc ListLessonVideo(ListLessonVideoRequest) returns (ListLessonVideoResponse);
+
+  rpc CreateLessonAttendance(CreateLessonAttendanceRequest) returns (CreateLessonAttendanceResponse);
+  rpc UpdateLessonAttendance(UpdateLessonAttendanceRequest) returns (UpdateLessonAttendanceResponse);
+  rpc DeleteLessonAttendance(DeleteLessonAttendanceRequest) returns (DeleteLessonAttendanceResponse);
+  rpc ListLessonAttendance(ListLessonAttendanceRequest) returns (ListLessonAttendanceResponse);
+}

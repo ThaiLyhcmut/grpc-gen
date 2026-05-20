@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package audit;
+
+option go_package = "github.com/thaily/lms/proto/audit";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+message AuditLog {
+  uint64 id = 1;
+  uint64 actor_id = 2;
+  string action = 3;
+  optional string target_type = 4;
+  optional uint64 target_id = 5;
+  optional string meta = 6;                // JSON-as-string
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  optional string created_by = 9;
+  optional string updated_by = 10;
+}
+
+message CreateAuditLogRequest {
+  optional uint64 id = 1;
+  uint64 actor_id = 2;
+  string action = 3;
+  optional string target_type = 4;
+  optional uint64 target_id = 5;
+  optional string meta = 6;
+  string created_by = 7;
+}
+message CreateAuditLogResponse { AuditLog audit_log = 1; }
+
+message UpdateAuditLogRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string meta = 2;
+  string updated_by = 3;
+}
+message UpdateAuditLogResponse { repeated AuditLog audit_log = 1; int32 affected_count = 2; }
+
+message DeleteAuditLogRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteAuditLogResponse { int32 affected_count = 1; }
+
+message ListAuditLogRequest { common.SearchRequest search = 1; }
+message ListAuditLogResponse { repeated AuditLog audit_log = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+service AuditService {
+  rpc CreateAuditLog(CreateAuditLogRequest) returns (CreateAuditLogResponse);
+  rpc UpdateAuditLog(UpdateAuditLogRequest) returns (UpdateAuditLogResponse);
+  rpc DeleteAuditLog(DeleteAuditLogRequest) returns (DeleteAuditLogResponse);
+  rpc ListAuditLog(ListAuditLogRequest) returns (ListAuditLogResponse);
+}

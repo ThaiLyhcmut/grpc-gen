@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  audit:
+    build:
+      context: ../../..
+      dockerfile: src/service/audit/Dockerfile
+    image: github.com/thaily/lms/audit:latest
+    container_name: audit_service
+    env_file:
+      - audit.env
+    ports:
+      - "50058:50058"
+    volumes:
+      - .:/app/service:ro
+      - ../../../logs:/app/logs
+    networks:
+      - audit_network
+    restart: unless-stopped
+
+networks:
+  audit_network:
+    driver: bridge

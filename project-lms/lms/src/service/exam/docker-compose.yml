@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  exam:
+    build:
+      context: ../../..
+      dockerfile: src/service/exam/Dockerfile
+    image: github.com/thaily/lms/exam:latest
+    container_name: exam_service
+    env_file:
+      - exam.env
+    ports:
+      - "50055:50055"
+    volumes:
+      - .:/app/service:ro
+      - ../../../logs:/app/logs
+    networks:
+      - exam_network
+    restart: unless-stopped
+
+networks:
+  exam_network:
+    driver: bridge

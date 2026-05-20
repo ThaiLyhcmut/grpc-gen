@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package material;
+
+option go_package = "github.com/thaily/lms/proto/material";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// =====================================================================
+// 1. Material
+// =====================================================================
+message Material {
+  uint64 id = 1;
+  uint64 owner_teacher_id = 2;
+  string title = 3;
+  optional string description = 4;
+  string storage_key = 5;
+  string file_name = 6;
+  string file_type = 7;
+  int64 size_bytes = 8;
+  MaterialVisibility visibility = 9;
+  optional CommunityStatus community_status = 10;
+  optional string reject_reason = 11;
+  uint32 download_count = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  optional string created_by = 15;
+  optional string updated_by = 16;
+}
+
+enum MaterialVisibility {
+  MATERIAL_VISIBILITY_UNSPECIFIED = 0;
+  MAT_CLASS = 1;
+  MAT_COMMUNITY = 2;
+}
+
+enum CommunityStatus {
+  COMMUNITY_STATUS_UNSPECIFIED = 0;
+  COMM_DRAFT = 1;
+  COMM_PENDING = 2;
+  COMM_APPROVED = 3;
+  COMM_REJECTED = 4;
+}
+
+message CreateMaterialRequest {
+  optional uint64 id = 1;
+  uint64 owner_teacher_id = 2;
+  string title = 3;
+  optional string description = 4;
+  string storage_key = 5;
+  string file_name = 6;
+  string file_type = 7;
+  int64 size_bytes = 8;
+  MaterialVisibility visibility = 9;
+  optional CommunityStatus community_status = 10;
+  optional string reject_reason = 11;
+  uint32 download_count = 12;
+  string created_by = 13;
+}
+message CreateMaterialResponse { Material material = 1; }
+
+message UpdateMaterialRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional MaterialVisibility visibility = 4;
+  CommunityStatus community_status = 5;
+  optional string reject_reason = 6;
+  optional uint32 download_count = 7;
+  string updated_by = 8;
+}
+message UpdateMaterialResponse { repeated Material material = 1; int32 affected_count = 2; }
+
+message DeleteMaterialRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteMaterialResponse { int32 affected_count = 1; }
+
+message ListMaterialRequest { common.SearchRequest search = 1; }
+message ListMaterialResponse { repeated Material material = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 2. MaterialClass (surrogate id)
+// =====================================================================
+message MaterialClass {
+  uint64 id = 1;
+  uint64 material_id = 2;
+  uint64 class_id = 3;
+  google.protobuf.Timestamp attached_at = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  optional string created_by = 7;
+  optional string updated_by = 8;
+}
+
+message CreateMaterialClassRequest {
+  optional uint64 id = 1;
+  uint64 material_id = 2;
+  uint64 class_id = 3;
+  google.protobuf.Timestamp attached_at = 4;
+  string created_by = 5;
+}
+message CreateMaterialClassResponse { MaterialClass material_class = 1; }
+
+message UpdateMaterialClassRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional google.protobuf.Timestamp attached_at = 2;
+  string updated_by = 3;
+}
+message UpdateMaterialClassResponse { repeated MaterialClass material_class = 1; int32 affected_count = 2; }
+
+message DeleteMaterialClassRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteMaterialClassResponse { int32 affected_count = 1; }
+
+message ListMaterialClassRequest { common.SearchRequest search = 1; }
+message ListMaterialClassResponse { repeated MaterialClass material_class = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 3. MaterialTag (surrogate id)
+// =====================================================================
+message MaterialTag {
+  uint64 id = 1;
+  uint64 material_id = 2;
+  string tag = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  optional string created_by = 6;
+  optional string updated_by = 7;
+}
+
+message CreateMaterialTagRequest {
+  optional uint64 id = 1;
+  uint64 material_id = 2;
+  string tag = 3;
+  string created_by = 4;
+}
+message CreateMaterialTagResponse { MaterialTag material_tag = 1; }
+
+message UpdateMaterialTagRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string tag = 2;
+  string updated_by = 3;
+}
+message UpdateMaterialTagResponse { repeated MaterialTag material_tag = 1; int32 affected_count = 2; }
+
+message DeleteMaterialTagRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteMaterialTagResponse { int32 affected_count = 1; }
+
+message ListMaterialTagRequest { common.SearchRequest search = 1; }
+message ListMaterialTagResponse { repeated MaterialTag material_tag = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// Service
+// =====================================================================
+service MaterialService {
+  rpc CreateMaterial(CreateMaterialRequest) returns (CreateMaterialResponse);
+  rpc UpdateMaterial(UpdateMaterialRequest) returns (UpdateMaterialResponse);
+  rpc DeleteMaterial(DeleteMaterialRequest) returns (DeleteMaterialResponse);
+  rpc ListMaterial(ListMaterialRequest) returns (ListMaterialResponse);
+
+  rpc CreateMaterialClass(CreateMaterialClassRequest) returns (CreateMaterialClassResponse);
+  rpc UpdateMaterialClass(UpdateMaterialClassRequest) returns (UpdateMaterialClassResponse);
+  rpc DeleteMaterialClass(DeleteMaterialClassRequest) returns (DeleteMaterialClassResponse);
+  rpc ListMaterialClass(ListMaterialClassRequest) returns (ListMaterialClassResponse);
+
+  rpc CreateMaterialTag(CreateMaterialTagRequest) returns (CreateMaterialTagResponse);
+  rpc UpdateMaterialTag(UpdateMaterialTagRequest) returns (UpdateMaterialTagResponse);
+  rpc DeleteMaterialTag(DeleteMaterialTagRequest) returns (DeleteMaterialTagResponse);
+  rpc ListMaterialTag(ListMaterialTagRequest) returns (ListMaterialTagResponse);
+}

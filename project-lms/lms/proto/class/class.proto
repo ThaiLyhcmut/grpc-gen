@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+package class;
+
+option go_package = "github.com/thaily/lms/proto/class";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// =====================================================================
+// 1. Class
+// =====================================================================
+message Class {
+  uint64 id = 1;
+  uint64 teacher_id = 2;
+  string name = 3;
+  optional string subject = 4;
+  optional string description = 5;
+  optional string cover_url = 6;
+  ClassStatus status = 7;
+  optional int32 max_students = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  optional string created_by = 11;
+  optional string updated_by = 12;
+}
+
+enum ClassStatus {
+  CLASS_STATUS_UNSPECIFIED = 0;
+  DRAFT = 1;
+  ACTIVE = 2;
+  ARCHIVED = 3;
+}
+
+message CreateClassRequest {
+  optional uint64 id = 1;
+  uint64 teacher_id = 2;
+  string name = 3;
+  optional string subject = 4;
+  optional string description = 5;
+  optional string cover_url = 6;
+  ClassStatus status = 7;
+  optional int32 max_students = 8;
+  string created_by = 9;
+}
+message CreateClassResponse { Class class = 1; }
+
+message UpdateClassRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string name = 2;
+  optional string subject = 3;
+  optional string description = 4;
+  optional string cover_url = 5;
+  optional ClassStatus status = 6;
+  optional int32 max_students = 7;
+  string updated_by = 8;
+}
+message UpdateClassResponse { repeated Class class = 1; int32 affected_count = 2; }
+
+message DeleteClassRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteClassResponse { int32 affected_count = 1; }
+
+message ListClassRequest { common.SearchRequest search = 1; }
+message ListClassResponse { repeated Class class = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 2. ClassInviteKey
+// =====================================================================
+message ClassInviteKey {
+  uint64 id = 1;
+  uint64 class_id = 2;
+  string key_code = 3 [(common.filterable) = false];
+  uint64 created_by_teacher_id = 4;
+  optional string note = 5;
+  optional google.protobuf.Timestamp expires_at = 6;
+  optional google.protobuf.Timestamp used_at = 7;
+  optional uint64 used_by_student_id = 8;
+  InviteKeyStatus status = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  optional string created_by = 12;
+  optional string updated_by = 13;
+}
+
+enum InviteKeyStatus {
+  INVITE_KEY_STATUS_UNSPECIFIED = 0;
+  KEY_ACTIVE = 1;
+  KEY_USED = 2;
+  KEY_REVOKED = 3;
+  KEY_EXPIRED = 4;
+}
+
+message CreateClassInviteKeyRequest {
+  optional uint64 id = 1;
+  uint64 class_id = 2;
+  string key_code = 3;
+  uint64 created_by_teacher_id = 4;
+  optional string note = 5;
+  optional google.protobuf.Timestamp expires_at = 6;
+  optional google.protobuf.Timestamp used_at = 7;
+  optional uint64 used_by_student_id = 8;
+  InviteKeyStatus status = 9;
+  string created_by = 10;
+}
+message CreateClassInviteKeyResponse { ClassInviteKey class_invite_key = 1; }
+
+message UpdateClassInviteKeyRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string note = 2;
+  optional google.protobuf.Timestamp expires_at = 3;
+  optional google.protobuf.Timestamp used_at = 4;
+  optional uint64 used_by_student_id = 5;
+  optional InviteKeyStatus status = 6;
+  string updated_by = 7;
+}
+message UpdateClassInviteKeyResponse { repeated ClassInviteKey class_invite_key = 1; int32 affected_count = 2; }
+
+message DeleteClassInviteKeyRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteClassInviteKeyResponse { int32 affected_count = 1; }
+
+message ListClassInviteKeyRequest { common.SearchRequest search = 1; }
+message ListClassInviteKeyResponse { repeated ClassInviteKey class_invite_key = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// 3. Enrollment
+// =====================================================================
+message Enrollment {
+  uint64 id = 1;
+  uint64 class_id = 2;
+  uint64 student_id = 3;
+  optional uint64 invite_key_id = 4;
+  google.protobuf.Timestamp joined_at = 5;
+  EnrollmentStatus status = 6;
+  optional google.protobuf.Timestamp removed_at = 7;
+  optional uint64 removed_by_user_id = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  optional string created_by = 11;
+  optional string updated_by = 12;
+}
+
+enum EnrollmentStatus {
+  ENROLLMENT_STATUS_UNSPECIFIED = 0;
+  ENROLL_ACTIVE = 1;
+  ENROLL_REMOVED = 2;
+}
+
+message CreateEnrollmentRequest {
+  optional uint64 id = 1;
+  uint64 class_id = 2;
+  uint64 student_id = 3;
+  optional uint64 invite_key_id = 4;
+  google.protobuf.Timestamp joined_at = 5;
+  EnrollmentStatus status = 6;
+  optional google.protobuf.Timestamp removed_at = 7;
+  optional uint64 removed_by_user_id = 8;
+  string created_by = 9;
+}
+message CreateEnrollmentResponse { Enrollment enrollment = 1; }
+
+message UpdateEnrollmentRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional EnrollmentStatus status = 2;
+  optional google.protobuf.Timestamp removed_at = 3;
+  optional uint64 removed_by_user_id = 4;
+  string updated_by = 5;
+}
+message UpdateEnrollmentResponse { repeated Enrollment enrollment = 1; int32 affected_count = 2; }
+
+message DeleteEnrollmentRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteEnrollmentResponse { int32 affected_count = 1; }
+
+message ListEnrollmentRequest { common.SearchRequest search = 1; }
+message ListEnrollmentResponse { repeated Enrollment enrollment = 1; int32 total = 2; int32 page = 3; int32 page_size = 4; }
+
+// =====================================================================
+// Service
+// =====================================================================
+service ClassService {
+  rpc CreateClass(CreateClassRequest) returns (CreateClassResponse);
+  rpc UpdateClass(UpdateClassRequest) returns (UpdateClassResponse);
+  rpc DeleteClass(DeleteClassRequest) returns (DeleteClassResponse);
+  rpc ListClass(ListClassRequest) returns (ListClassResponse);
+
+  rpc CreateClassInviteKey(CreateClassInviteKeyRequest) returns (CreateClassInviteKeyResponse);
+  rpc UpdateClassInviteKey(UpdateClassInviteKeyRequest) returns (UpdateClassInviteKeyResponse);
+  rpc DeleteClassInviteKey(DeleteClassInviteKeyRequest) returns (DeleteClassInviteKeyResponse);
+  rpc ListClassInviteKey(ListClassInviteKeyRequest) returns (ListClassInviteKeyResponse);
+
+  rpc CreateEnrollment(CreateEnrollmentRequest) returns (CreateEnrollmentResponse);
+  rpc UpdateEnrollment(UpdateEnrollmentRequest) returns (UpdateEnrollmentResponse);
+  rpc DeleteEnrollment(DeleteEnrollmentRequest) returns (DeleteEnrollmentResponse);
+  rpc ListEnrollment(ListEnrollmentRequest) returns (ListEnrollmentResponse);
+}

@@ -1,0 +1,51 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+gen_skeleton
+/src/service/*/main
+
+# Test binary
+*.test
+*.out
+
+# Build
+/bin/
+/build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Env files
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TLS keys/certs (per-service generated, never commit)
+**/certs/*.key
+**/certs/*.crt
+**/certs/*.pem
+**/certs/*.csr
+**/certs/*.srl
+
+# Generated proto Go files (regen with `make proto-*`)
+proto/*/*.pb.go
+
+# Stray compiled service binaries (just service name, no extension)
+/user
+/class
+/lesson
+/material
+/exam
+/submission
+/notification
+/audit

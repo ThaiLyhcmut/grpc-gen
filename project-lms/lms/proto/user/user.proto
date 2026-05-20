@@ -1,0 +1,299 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/thaily/lms/proto/user";
+
+import "google/protobuf/timestamp.proto";
+import "proto/common/common.proto";
+
+// =====================================================================
+// 1. User
+// =====================================================================
+message User {
+  uint64 id = 1;
+  string email = 2;
+  optional string phone = 3;
+  string password_hash = 4 [(common.filterable) = false];
+  string full_name = 5;
+  optional string avatar_url = 6;
+  UserRole role = 7;
+  UserStatus status = 8;
+  optional google.protobuf.Timestamp email_verified_at = 9;
+  optional google.protobuf.Timestamp last_login_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  optional string created_by = 13;
+  optional string updated_by = 14;
+}
+
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  ADMIN = 1;
+  TEACHER = 2;
+  STUDENT = 3;
+}
+
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  ACTIVE = 1;
+  BANNED = 2;
+  PENDING_VERIFY = 3;
+}
+
+message CreateUserRequest {
+  optional uint64 id = 1;
+  string email = 2;
+  optional string phone = 3;
+  string password_hash = 4;
+  string full_name = 5;
+  optional string avatar_url = 6;
+  UserRole role = 7;
+  UserStatus status = 8;
+  optional google.protobuf.Timestamp email_verified_at = 9;
+  optional google.protobuf.Timestamp last_login_at = 10;
+  string created_by = 11;
+}
+message CreateUserResponse { User user = 1; }
+
+message UpdateUserRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string email = 2;
+  optional string phone = 3;
+  optional string password_hash = 4;
+  optional string full_name = 5;
+  optional string avatar_url = 6;
+  optional UserRole role = 7;
+  optional UserStatus status = 8;
+  optional google.protobuf.Timestamp email_verified_at = 9;
+  optional google.protobuf.Timestamp last_login_at = 10;
+  string updated_by = 11;
+}
+message UpdateUserResponse { repeated User user = 1; int32 affected_count = 2; }
+
+message DeleteUserRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteUserResponse { int32 affected_count = 1; }
+
+message ListUserRequest { common.SearchRequest search = 1; }
+message ListUserResponse {
+  repeated User user = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// =====================================================================
+// 2. TeacherProfile
+// =====================================================================
+message TeacherProfile {
+  uint64 id = 1;
+  uint64 user_id = 2;
+  optional string bio = 3;
+  optional string subjects = 4;            // JSON-as-string
+  optional int32 years_exp = 5;
+  optional string facebook_url = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  optional string created_by = 9;
+  optional string updated_by = 10;
+}
+
+message CreateTeacherProfileRequest {
+  optional uint64 id = 1;
+  uint64 user_id = 2;
+  optional string bio = 3;
+  optional string subjects = 4;
+  optional int32 years_exp = 5;
+  optional string facebook_url = 6;
+  string created_by = 7;
+}
+message CreateTeacherProfileResponse { TeacherProfile teacher_profile = 1; }
+
+message UpdateTeacherProfileRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string bio = 2;
+  optional string subjects = 3;
+  optional int32 years_exp = 4;
+  optional string facebook_url = 5;
+  string updated_by = 6;
+}
+message UpdateTeacherProfileResponse { repeated TeacherProfile teacher_profile = 1; int32 affected_count = 2; }
+
+message DeleteTeacherProfileRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteTeacherProfileResponse { int32 affected_count = 1; }
+
+message ListTeacherProfileRequest { common.SearchRequest search = 1; }
+message ListTeacherProfileResponse {
+  repeated TeacherProfile teacher_profile = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// =====================================================================
+// 3. StudentProfile
+// =====================================================================
+message StudentProfile {
+  uint64 id = 1;
+  uint64 user_id = 2;
+  optional string grade = 3;
+  optional string school_name = 4;
+  optional string parent_name = 5;
+  optional string parent_phone = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  optional string created_by = 9;
+  optional string updated_by = 10;
+}
+
+message CreateStudentProfileRequest {
+  optional uint64 id = 1;
+  uint64 user_id = 2;
+  optional string grade = 3;
+  optional string school_name = 4;
+  optional string parent_name = 5;
+  optional string parent_phone = 6;
+  string created_by = 7;
+}
+message CreateStudentProfileResponse { StudentProfile student_profile = 1; }
+
+message UpdateStudentProfileRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional string grade = 2;
+  optional string school_name = 3;
+  optional string parent_name = 4;
+  optional string parent_phone = 5;
+  string updated_by = 6;
+}
+message UpdateStudentProfileResponse { repeated StudentProfile student_profile = 1; int32 affected_count = 2; }
+
+message DeleteStudentProfileRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteStudentProfileResponse { int32 affected_count = 1; }
+
+message ListStudentProfileRequest { common.SearchRequest search = 1; }
+message ListStudentProfileResponse {
+  repeated StudentProfile student_profile = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// =====================================================================
+// 4. RefreshToken
+// =====================================================================
+message RefreshToken {
+  uint64 id = 1;
+  uint64 user_id = 2;
+  string token_hash = 3 [(common.filterable) = false];
+  optional string user_agent = 4;
+  optional string ip_address = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  optional google.protobuf.Timestamp revoked_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  optional string created_by = 10;
+  optional string updated_by = 11;
+}
+
+message CreateRefreshTokenRequest {
+  optional uint64 id = 1;
+  uint64 user_id = 2;
+  string token_hash = 3;
+  optional string user_agent = 4;
+  optional string ip_address = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  optional google.protobuf.Timestamp revoked_at = 7;
+  string created_by = 8;
+}
+message CreateRefreshTokenResponse { RefreshToken refresh_token = 1; }
+
+message UpdateRefreshTokenRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional google.protobuf.Timestamp revoked_at = 2;
+  string updated_by = 3;
+}
+message UpdateRefreshTokenResponse { repeated RefreshToken refresh_token = 1; int32 affected_count = 2; }
+
+message DeleteRefreshTokenRequest { repeated common.FilterCriteria filters = 1; }
+message DeleteRefreshTokenResponse { int32 affected_count = 1; }
+
+message ListRefreshTokenRequest { common.SearchRequest search = 1; }
+message ListRefreshTokenResponse {
+  repeated RefreshToken refresh_token = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// =====================================================================
+// 5. PasswordReset
+// =====================================================================
+message PasswordReset {
+  uint64 id = 1;
+  uint64 user_id = 2;
+  string token_hash = 3 [(common.filterable) = false];
+  google.protobuf.Timestamp expires_at = 4;
+  optional google.protobuf.Timestamp used_at = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  optional string created_by = 8;
+  optional string updated_by = 9;
+}
+
+message CreatePasswordResetRequest {
+  optional uint64 id = 1;
+  uint64 user_id = 2;
+  string token_hash = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  optional google.protobuf.Timestamp used_at = 5;
+  string created_by = 6;
+}
+message CreatePasswordResetResponse { PasswordReset password_reset = 1; }
+
+message UpdatePasswordResetRequest {
+  repeated common.FilterCriteria filters = 1;
+  optional google.protobuf.Timestamp used_at = 2;
+  string updated_by = 3;
+}
+message UpdatePasswordResetResponse { repeated PasswordReset password_reset = 1; int32 affected_count = 2; }
+
+message DeletePasswordResetRequest { repeated common.FilterCriteria filters = 1; }
+message DeletePasswordResetResponse { int32 affected_count = 1; }
+
+message ListPasswordResetRequest { common.SearchRequest search = 1; }
+message ListPasswordResetResponse {
+  repeated PasswordReset password_reset = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// =====================================================================
+// Service
+// =====================================================================
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUser(ListUserRequest) returns (ListUserResponse);
+
+  rpc CreateTeacherProfile(CreateTeacherProfileRequest) returns (CreateTeacherProfileResponse);
+  rpc UpdateTeacherProfile(UpdateTeacherProfileRequest) returns (UpdateTeacherProfileResponse);
+  rpc DeleteTeacherProfile(DeleteTeacherProfileRequest) returns (DeleteTeacherProfileResponse);
+  rpc ListTeacherProfile(ListTeacherProfileRequest) returns (ListTeacherProfileResponse);
+
+  rpc CreateStudentProfile(CreateStudentProfileRequest) returns (CreateStudentProfileResponse);
+  rpc UpdateStudentProfile(UpdateStudentProfileRequest) returns (UpdateStudentProfileResponse);
+  rpc DeleteStudentProfile(DeleteStudentProfileRequest) returns (DeleteStudentProfileResponse);
+  rpc ListStudentProfile(ListStudentProfileRequest) returns (ListStudentProfileResponse);
+
+  rpc CreateRefreshToken(CreateRefreshTokenRequest) returns (CreateRefreshTokenResponse);
+  rpc UpdateRefreshToken(UpdateRefreshTokenRequest) returns (UpdateRefreshTokenResponse);
+  rpc DeleteRefreshToken(DeleteRefreshTokenRequest) returns (DeleteRefreshTokenResponse);
+  rpc ListRefreshToken(ListRefreshTokenRequest) returns (ListRefreshTokenResponse);
+
+  rpc CreatePasswordReset(CreatePasswordResetRequest) returns (CreatePasswordResetResponse);
+  rpc UpdatePasswordReset(UpdatePasswordResetRequest) returns (UpdatePasswordResetResponse);
+  rpc DeletePasswordReset(DeletePasswordResetRequest) returns (DeletePasswordResetResponse);
+  rpc ListPasswordReset(ListPasswordResetRequest) returns (ListPasswordResetResponse);
+}

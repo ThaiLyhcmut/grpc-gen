@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  user:
+    build:
+      context: ../../..
+      dockerfile: src/service/user/Dockerfile
+    image: github.com/thaily/lms/user:latest
+    container_name: user_service
+    env_file:
+      - user.env
+    ports:
+      - "50051:50051"
+    volumes:
+      - .:/app/service:ro
+      - ../../../logs:/app/logs
+    networks:
+      - user_network
+    restart: unless-stopped
+
+networks:
+  user_network:
+    driver: bridge
