@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"bytes"
+	"go/format"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,24 +12,34 @@ import (
 	"gen_skeleton/types"
 )
 
+// renderAndWriteGo executes the given template into a buffer, runs gofmt on the
+// result, and writes it to outPath. Falls back to unformatted output if gofmt
+// fails (so a template typo surfaces as a useful Go compile error rather than
+// being masked by go/format's complaint).
+func renderAndWriteGo(tmpl *template.Template, data interface{}, outPath string) {
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		log.Fatal(err)
+	}
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		log.Printf("gofmt failed on %s (writing unformatted): %v", outPath, err)
+		formatted = buf.Bytes()
+	}
+	if err := os.WriteFile(outPath, formatted, 0644); err != nil {
+		log.Fatal(err)
+	}
+}
+
 // GenerateMain creates main.go from template
 func GenerateMain(serviceDir string, data types.Data) {
 	tmpl, err := template.ParseFiles("template/main.tmpl")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	out, err := os.Create(filepath.Join(serviceDir, "main.go"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer out.Close()
-
-	if err := tmpl.Execute(out, data); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Generated %s/main.go\n", serviceDir)
+	outPath := filepath.Join(serviceDir, "main.go")
+	renderAndWriteGo(tmpl, data, outPath)
+	log.Printf("Generated %s\n", outPath)
 }
 
 // GenerateHandlerRoot creates handler/handler.go from template
@@ -36,18 +48,9 @@ func GenerateHandlerRoot(handlerDir string, data types.HandlerData) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	out, err := os.Create(filepath.Join(handlerDir, "handler.go"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer out.Close()
-
-	if err := tmpl.Execute(out, data); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Generated %s/handler.go\n", handlerDir)
+	outPath := filepath.Join(handlerDir, "handler.go")
+	renderAndWriteGo(tmpl, data, outPath)
+	log.Printf("Generated %s\n", outPath)
 }
 
 // GenerateEntityHandler creates a simple entity handler from template
@@ -56,23 +59,13 @@ func GenerateEntityHandler(handlerDir string, data types.EntityHandlerData) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	filename := strings.ToLower(data.EntityName) + ".go"
-	out, err := os.Create(filepath.Join(handlerDir, filename))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer out.Close()
-
-	if err := tmpl.Execute(out, data); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Generated %s/%s\n", handlerDir, filename)
+	outPath := filepath.Join(handlerDir, strings.ToLower(data.EntityName)+".go")
+	renderAndWriteGo(tmpl, data, outPath)
+	log.Printf("Generated %s\n", outPath)
 }
 
 // GenerateCRUDHandler creates a full CRUD handler from template
-func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, modulePath string) {
+func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, allUpdateFieldsMap map[string][]string, modulePath string) {
 	// Prepare data for template
 	requiredFields := []types.Field{}
 	optionalFields := []types.Field{}
@@ -99,6 +92,14 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		}
 	}
 
+	// Get all fields from UpdateRequest
+	allUpdateFieldNames := make(map[string]bool)
+	if updateFieldNames, ok := allUpdateFieldsMap[entityName]; ok {
+		for _, fieldName := range updateFieldNames {
+			allUpdateFieldNames[fieldName] = true
+		}
+	}
+
 	for i := range fields {
 		field := &fields[i] // Use pointer to modify in place
 
@@ -106,9 +107,9 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 			enumType = field.EnumType
 		}
 
-		if !field.IsTimestamp {
-			filterableFields = append(filterableFields, field.DBField)
-		}
+		// All scalar/timestamp fields are filterable. Client passes ISO/MySQL
+		// datetime strings for Timestamp columns; MySQL coerces them on compare.
+		filterableFields = append(filterableFields, field.DBField)
 
 		// Mark field as optional if it's in optionalFieldsMap (MUST DO THIS FIRST)
 		if optionalFieldNames[field.DBField] {
@@ -123,15 +124,18 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		// Check if field is required based on CreateRequest
 		if requiredFieldNames[field.DBField] && !field.IsEnum {
 			requiredFields = append(requiredFields, *field)
-		} else if optionalFieldNames[field.DBField] && !field.IsTimestamp {
+		} else if optionalFieldNames[field.DBField] {
+			// Include timestamp fields in optionalFields too
 			optionalFields = append(optionalFields, *field)
 		}
 
-		// All non-timestamp fields can be updated and created
-		if !field.IsTimestamp {
+		// Only add to updateFields if field exists in UpdateRequest
+		if allUpdateFieldNames[field.DBField] {
 			updateFields = append(updateFields, *field)
-			createFields = append(createFields, *field)
 		}
+
+		// All fields can be created (including custom timestamps like due_date)
+		createFields = append(createFields, *field)
 	}
 
 	// Get optional entity fields
@@ -151,11 +155,18 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 
 	// Build scan fields list (start with id)
 	scanFields = append(scanFields, "entity.Id")
+	timestampFields := []types.Field{}
 	for _, field := range fields {
 		if field.IsEnum {
 			scanFields = append(scanFields, field.GoName+"Str")
 		} else if field.IsTimestamp {
-			continue
+			// Custom timestamp fields need to be scanned into sql.NullTime variable
+			scanFields = append(scanFields, field.GoName+"Time")
+			timestampFields = append(timestampFields, field)
+		} else if field.Type == "[]byte" {
+			// bytes: scan directly into the entity field. Go's []byte is
+			// already a reference type; nil represents NULL — no NullXxx needed.
+			scanFields = append(scanFields, "entity."+field.GoName)
 		} else {
 			// Check if this field is optional in the entity
 			if optionalEntityFieldsSet[field.DBField] {
@@ -174,10 +185,9 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 	selectFields := []string{}
 
 	for _, field := range fields {
-		if !field.IsTimestamp {
-			createFieldNames = append(createFieldNames, field.DBField)
-			createPlaceholders = append(createPlaceholders, "?")
-		}
+		// Include all fields (including custom timestamps like due_date)
+		createFieldNames = append(createFieldNames, field.DBField)
+		createPlaceholders = append(createPlaceholders, "?")
 	}
 
 	selectFields = append([]string{"id"}, createFieldNames...)
@@ -213,7 +223,7 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		ModulePath:           modulePath,
 		PackagePath:          packagePath,
 		EntityName:           entityName,
-		TableName:            entityName,
+		TableName:            strings.ToLower(entityName),
 		Methods:              methods,
 		EnumType:             enumType,
 		RequiredFields:       requiredFields,
@@ -229,6 +239,7 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 		OptionalEntityFields:    optionalEntityFields,
 		OptionalEntityFieldsData: optionalEntityFieldsData,
 		OptionalUpdateFields:    optionalUpdateFields,
+		TimestampFields:         timestampFields,
 		IsCreatedByOptional:  isCreatedByOptional,
 		IsUpdatedByOptional:  isUpdatedByOptional,
 	}
@@ -237,19 +248,6 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 	funcMap := template.FuncMap{
 		"lower":     strings.ToLower,
 		"hasPrefix": strings.HasPrefix,
-		"pluralize": func(s string) string {
-			// Pluralize keeping first letter uppercase (Go proto convention)
-			if len(s) == 0 {
-				return s
-			}
-			// Check if ends with consonant + y
-			if strings.HasSuffix(s, "y") && len(s) > 1 {
-				// Faculty -> Faculties
-				return s[:len(s)-1] + "ies"
-			}
-			// Default: just add s
-			return s + "s"
-		},
 		"isOptionalEntity": func(fieldName string, optionalFields []string) bool {
 			for _, opt := range optionalFields {
 				if opt == fieldName {
@@ -272,19 +270,9 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	filename := strings.ToLower(entityName) + ".go"
-	out, err := os.Create(filepath.Join(handlerDir, filename))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer out.Close()
-
-	if err := tmpl.Execute(out, data); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Generated CRUD handler %s/%s\n", handlerDir, filename)
+	outPath := filepath.Join(handlerDir, strings.ToLower(entityName)+".go")
+	renderAndWriteGo(tmpl, data, outPath)
+	log.Printf("Generated CRUD handler %s\n", outPath)
 }
 
 // GenerateEnvFile creates .env file from template

@@ -38,7 +38,7 @@ type Field struct {
 	DefaultDBValue string
 	IsOptional     bool
 	IsEnum         bool
-	IsTimestamp    bool
+	IsTimestamp    bool // True for custom timestamps like due_date (not system timestamps)
 }
 
 type CRUDHandlerData struct {
@@ -61,6 +61,7 @@ type CRUDHandlerData struct {
 	OptionalEntityFields    []string // Optional field names in entity (created_by, updated_by, etc)
 	OptionalEntityFieldsData []Field  // Optional entity fields with full metadata for scanning
 	OptionalUpdateFields    []string // Optional fields in UpdateRequest
+	TimestampFields         []Field  // Custom timestamp fields (like due_date, not created_at/updated_at)
 	IsCreatedByOptional     bool     // Whether created_by is optional in CreateRequest
 	IsUpdatedByOptional     bool     // Whether updated_by is optional in UpdateRequest
 }

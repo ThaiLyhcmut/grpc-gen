@@ -15,21 +15,33 @@ func ToSnakeCase(s string) string {
 }
 
 // ToCamelCase converts snake_case to CamelCase
-// Special handling: numeric parts keep underscore (e.g., percent_stage_1 -> PercentStage_1)
+// Special handling for protobuf compatibility:
+// - percent_stage_1 -> PercentStage_1 (underscore before numeric only parts)
+// - is_2fa_enabled -> Is_2FaEnabled (underscore before digit, capitalize letters after)
 func ToCamelCase(s string) string {
 	parts := strings.Split(s, "_")
 	var result strings.Builder
 
 	for i := range parts {
-		if len(parts[i]) > 0 {
-			// Check if this part is numeric (starts with a digit)
-			if parts[i][0] >= '0' && parts[i][0] <= '9' {
-				// Keep underscore before numeric parts
+		part := parts[i]
+		if len(part) > 0 {
+			// Check if this part starts with a digit
+			if part[0] >= '0' && part[0] <= '9' {
+				// Keep underscore before parts starting with digits
 				result.WriteRune('_')
-				result.WriteString(parts[i])
+				// Find where digits end and letters begin
+				j := 0
+				for j < len(part) && ((part[j] >= '0' && part[j] <= '9')) {
+					result.WriteByte(part[j])
+					j++
+				}
+				// Capitalize the remaining letters
+				if j < len(part) {
+					result.WriteString(strings.ToUpper(string(part[j])) + part[j+1:])
+				}
 			} else {
 				// Capitalize non-numeric parts
-				result.WriteString(strings.ToUpper(parts[i][:1]) + parts[i][1:])
+				result.WriteString(strings.ToUpper(part[:1]) + part[1:])
 			}
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	pb "{{.PackagePath}}"
+	commonpb "{{.ModulePath}}/proto/common"
 	"{{.ModulePath}}/src/service/pkg/helper"
 	"{{.ModulePath}}/src/service/pkg/logger"
 
@@ -15,118 +16,35 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-{{range .Methods}}
-{{if eq .Name (printf "Create%s" $.EntityName)}}
-// Create{{$.EntityName}} creates a new {{$.EntityName}} record
-func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
-	defer logger.TraceFunction(ctx)()
-
-	// Validate required fields (only string types)
-	{{range $.RequiredFields}}{{if eq .Type "string"}}if req.{{.GoName}} == "" {
-		return nil, status.Error(codes.InvalidArgument, "{{.ProtoName}} is required")
-	}
-	{{end}}{{end}}
-	// Generate UUID
-	id := uuid.New().String()
-
-	// Prepare fields
-	{{range $.OptionalFields}}{{if not .IsEnum}}{{.GoName}} := {{.DefaultValue}}
-	if req.{{.GoName}} != nil {
-		{{.GoName}} = *req.{{.GoName}}
-	}
-	{{end}}{{end}}
-	{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} enum to string
-	{{.GoName}}Value := pb.{{.EnumType}}_{{.DefaultValue}}
-	{{if .IsOptional}}if req.{{.GoName}} != nil {
-		{{.GoName}}Value = *req.{{.GoName}}
-	}{{else}}
-	{{.GoName}}Value = req.{{.GoName}}{{end}}
-	{{.GoName}}Str := "{{.DefaultDBValue}}"
-	switch {{.GoName}}Value {
-	{{range .EnumValues}}case pb.{{$field.EnumType}}_{{.}}:
-		{{$field.GoName}}Str = "{{. | lower}}"
-	{{end}}}
-	{{end}}
-	// Handle created_by field (dynamic based on proto definition)
-	{{if $.IsCreatedByOptional}}var createdBy interface{}
-	if req.CreatedBy != nil {
-		createdBy = *req.CreatedBy
-	} else {
-		createdBy = nil
-	}{{else}}createdBy := req.CreatedBy{{end}}
-
-	// Insert into database
-	query := `
-		INSERT INTO {{$.TableName}} (id, {{$.CreateFieldsSQL}}, created_by, created_at, updated_at)
-		VALUES (?, {{$.CreatePlaceholders}}, ?, NOW(), NOW())
-	`
-
-	_, err := h.execQuery(ctx, query,
-		id,
-		{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
-		{{else if .IsOptional}}{{.GoName}},
-		{{else}}req.{{.GoName}},
-		{{end}}{{end}}createdBy,
-	)
-
-	if err != nil {
-		if strings.Contains(err.Error(), "Duplicate entry") {
-			return nil, status.Error(codes.AlreadyExists, "{{$.EntityName | lower}} already exists")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to create {{$.EntityName | lower}}: %v", err)
-	}
-
-	result, err := h.Get{{$.EntityName}}(ctx, &pb.Get{{$.EntityName}}Request{Id: id})
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to get {{$.EntityName | lower}}")
-	}
-	return &pb.{{.ResponseType}}{
-		{{$.EntityName}}: result.Get{{$.EntityName}}(),
-	}, nil
-}
-{{end}}
-
-{{if eq .Name (printf "Get%s" $.EntityName)}}
-// Get{{$.EntityName}} retrieves a {{$.EntityName}} by ID
-func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
-	defer logger.TraceFunction(ctx)()
-
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
-	}
-
-	query := `
-		SELECT {{$.SelectFieldsSQL}}
-		FROM {{$.TableName}}
-		WHERE id = ?
-	`
-
+// scan{{$.EntityName}} reads a single row into a *pb.{{$.EntityName}}.
+// Shared by Create/Update inline-select and the List handler.
+func scan{{$.EntityName}}(scanner interface{ Scan(...interface{}) error }) (*pb.{{$.EntityName}}, error) {
 	var entity pb.{{$.EntityName}}
 	var createdAt, updatedAt sql.NullTime
 	var createdBy, updatedBy sql.NullString
 	{{range $.EnumFields}}var {{.GoName}}Str string
+	{{end}}{{range $.TimestampFields}}var {{.GoName}}Time sql.NullTime
 	{{end}}{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}var {{.GoName}}Null sql.NullString
 	{{else if eq .Type "int32"}}var {{.GoName}}Null sql.NullInt32
 	{{else if eq .Type "int64"}}var {{.GoName}}Null sql.NullInt64
+	{{else if eq .Type "uint32"}}var {{.GoName}}Null sql.NullInt64
+	{{else if eq .Type "uint64"}}var {{.GoName}}Null sql.NullInt64
+	{{else if eq .Type "float32"}}var {{.GoName}}Null sql.NullFloat64
+	{{else if eq .Type "float64"}}var {{.GoName}}Null sql.NullFloat64
 	{{else if eq .Type "bool"}}var {{.GoName}}Null sql.NullBool
 	{{end}}{{end}}
-	err := h.queryRow(ctx, query, req.Id).Scan(
+	err := scanner.Scan(
 		{{range $.ScanFields}}&{{.}},
 		{{end}}&createdAt,
 		&updatedAt,
 		&createdBy,
 		&updatedBy,
 	)
-
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, status.Error(codes.NotFound, "{{$.EntityName | lower}} not found")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to get {{$.EntityName | lower}}: %v", err)
+		return nil, err
 	}
 
-	{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} string to enum
-	switch {{.GoName}}Str {
+	{{range $.EnumFields}}{{$field := .}}switch {{.GoName}}Str {
 	{{range .EnumValues}}case "{{. | lower}}":
 		entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{.}}
 	{{end}}default:
@@ -139,13 +57,20 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	if updatedAt.Valid {
 		entity.UpdatedAt = timestamppb.New(updatedAt.Time)
 	}
-	if createdBy.Valid {
+	{{if isOptionalEntity "created_by" $.OptionalEntityFields}}if createdBy.Valid {
+		entity.CreatedBy = &createdBy.String
+	}{{else}}if createdBy.Valid {
 		entity.CreatedBy = createdBy.String
-	}
-	if updatedBy.Valid {
+	}{{end}}
+	{{if isOptionalEntity "updated_by" $.OptionalEntityFields}}if updatedBy.Valid {
+		entity.UpdatedBy = &updatedBy.String
+	}{{else}}if updatedBy.Valid {
 		entity.UpdatedBy = updatedBy.String
+	}{{end}}
+	{{range $.TimestampFields}}if {{.GoName}}Time.Valid {
+		entity.{{.GoName}} = timestamppb.New({{.GoName}}Time.Time)
 	}
-	{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}if {{.GoName}}Null.Valid {
+	{{end}}{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}if {{.GoName}}Null.Valid {
 		val := {{.GoName}}Null.String
 		entity.{{.GoName}} = &val
 	}
@@ -157,28 +82,141 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		val := {{.GoName}}Null.Int64
 		entity.{{.GoName}} = &val
 	}
+	{{else if eq .Type "uint32"}}if {{.GoName}}Null.Valid {
+		val := uint32({{.GoName}}Null.Int64)
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "uint64"}}if {{.GoName}}Null.Valid {
+		val := uint64({{.GoName}}Null.Int64)
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "float32"}}if {{.GoName}}Null.Valid {
+		val := float32({{.GoName}}Null.Float64)
+		entity.{{.GoName}} = &val
+	}
+	{{else if eq .Type "float64"}}if {{.GoName}}Null.Valid {
+		val := {{.GoName}}Null.Float64
+		entity.{{.GoName}} = &val
+	}
 	{{else if eq .Type "bool"}}if {{.GoName}}Null.Valid {
 		val := {{.GoName}}Null.Bool
 		entity.{{.GoName}} = &val
 	}
 	{{end}}{{end}}
+	return &entity, nil
+}
+
+// build{{$.EntityName}}Where assembles a WHERE clause from FilterCriteria. Delegates
+// to helper.BuildWhereClause which supports both single conditions and nested
+// FilterGroup (AND/OR) — including recursion — and applies the whitelist.
+func build{{$.EntityName}}Where(filters []*commonpb.FilterCriteria) (string, []interface{}) {
+	whiteMap := map[string]bool{
+		{{range $.FilterableFields}}"{{.}}": true,
+		{{end}}
+	}
+	args := []interface{}{}
+	whereClause := helper.BuildWhereClause(filters, &args, whiteMap)
+	return whereClause, args
+}
+
+{{range .Methods}}
+{{if eq .Name (printf "Create%s" $.EntityName)}}
+// Create{{$.EntityName}} creates a new {{$.EntityName}} record
+func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
+	defer logger.TraceFunction(ctx)()
+
+	// Validate required fields (only string types)
+	{{range $.RequiredFields}}{{if eq .Type "string"}}if req.{{.GoName}} == "" {
+		return nil, status.Error(codes.InvalidArgument, "{{.ProtoName}} is required")
+	}
+	{{end}}{{end}}
+	id := uuid.New().String()
+
+	// Prepare fields. Use interface{} so nil propagates as SQL NULL rather than
+	// silently becoming the zero value of the Go type (would lose presence info).
+	{{range $.OptionalFields}}{{if not .IsEnum}}{{if .IsTimestamp}}// Optional timestamp: {{.GoName}}
+	var {{.GoName}} interface{}
+	if req.{{.GoName}} != nil {
+		{{.GoName}} = req.{{.GoName}}.AsTime()
+	}
+	{{else if eq .Type "[]byte"}}// Optional bytes: req.{{.GoName}} is already []byte (nil → NULL); use directly.
+	{{else}}// Optional {{.Type}}: {{.GoName}}
+	var {{.GoName}} interface{}
+	if req.{{.GoName}} != nil {
+		{{.GoName}} = *req.{{.GoName}}
+	}
+	{{end}}{{end}}{{end}}
+	{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} enum to string
+	{{.GoName}}Value := pb.{{.EnumType}}_{{.DefaultValue}}
+	{{if .IsOptional}}if req.{{.GoName}} != nil {
+		{{.GoName}}Value = *req.{{.GoName}}
+	}{{else}}
+	{{.GoName}}Value = req.{{.GoName}}{{end}}
+	{{.GoName}}Str := "{{.DefaultDBValue}}"
+	switch {{.GoName}}Value {
+	{{range .EnumValues}}case pb.{{$field.EnumType}}_{{.}}:
+		{{$field.GoName}}Str = "{{. | lower}}"
+	{{end}}}
+	{{end}}
+	// Handle created_by field
+	{{if $.IsCreatedByOptional}}var createdBy interface{}
+	if req.CreatedBy != nil {
+		createdBy = *req.CreatedBy
+	} else {
+		createdBy = nil
+	}{{else}}createdBy := req.CreatedBy{{end}}
+
+	query := `
+		INSERT INTO {{$.TableName}} (id, {{$.CreateFieldsSQL}}, created_by, created_at, updated_at)
+		VALUES (?, {{$.CreatePlaceholders}}, ?, NOW(), NOW())
+	`
+
+	_, err := h.execQuery(ctx, query,
+		id,
+		{{range $.CreateFields}}{{if .IsEnum}}{{.GoName}}Str,
+		{{else if and .IsOptional (eq .Type "[]byte")}}req.{{.GoName}},
+		{{else if .IsOptional}}{{.GoName}},
+		{{else if .IsTimestamp}}req.{{.GoName}}.AsTime(),
+		{{else}}req.{{.GoName}},
+		{{end}}{{end}}createdBy,
+	)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			return nil, status.Error(codes.AlreadyExists, "{{$.EntityName | lower}} already exists")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to create {{$.EntityName | lower}}: %v", err)
+	}
+
+	// Inline SELECT to return the created entity (replaces previous h.Get{{$.EntityName}} call).
+	selectQuery := `
+		SELECT {{$.SelectFieldsSQL}}
+		FROM {{$.TableName}}
+		WHERE id = ?
+	`
+	entity, err := scan{{$.EntityName}}(h.queryRow(ctx, selectQuery, id))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch created {{$.EntityName | lower}}: %v", err)
+	}
 
 	return &pb.{{.ResponseType}}{
-		{{$.EntityName}}: &entity,
+		{{$.EntityName}}: entity,
 	}, nil
 }
 {{end}}
 
 {{if eq .Name (printf "Update%s" $.EntityName)}}
-// Update{{$.EntityName}} updates an existing {{$.EntityName}}
+// Update{{$.EntityName}} applies the request field changes to ALL rows matching Filters.
+// Returns the updated rows and affected_count.
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
+	whereClause, whereArgs := build{{$.EntityName}}Where(req.GetFilters())
+	if whereClause == "" {
+		return nil, status.Error(codes.InvalidArgument, "filters are required for update (empty filter would update all rows)")
 	}
 
-	// Build dynamic update query
+	// Build dynamic SET clause from request fields
 	updateFields := []string{}
 	args := []interface{}{}
 
@@ -191,6 +229,8 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 			{{$field.GoName}}Str = "{{. | lower}}"
 		{{end}}}
 		args = append(args, {{.GoName}}Str)
+		{{else if .IsTimestamp}}args = append(args, req.{{.GoName}}.AsTime())
+		{{else if eq .Type "[]byte"}}args = append(args, req.{{.GoName}})
 		{{else}}args = append(args, *req.{{.GoName}})
 		{{end}}
 	}
@@ -202,6 +242,7 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		{{$field.GoName}}Str = "{{. | lower}}"
 	{{end}}}
 	args = append(args, {{.GoName}}Str)
+	{{else if .IsTimestamp}}args = append(args, req.{{.GoName}}.AsTime())
 	{{else}}args = append(args, req.{{.GoName}})
 	{{end}}
 	{{end}}{{end}}
@@ -209,7 +250,7 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		return nil, status.Error(codes.InvalidArgument, "no fields to update")
 	}
 
-	// Add updated_by and updated_at (dynamic based on proto definition)
+	// updated_by / updated_at
 	{{if $.IsUpdatedByOptional}}if req.UpdatedBy != nil {
 		updateFields = append(updateFields, "updated_by = ?")
 		args = append(args, *req.UpdatedBy)
@@ -217,57 +258,73 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	args = append(args, req.UpdatedBy){{end}}
 	updateFields = append(updateFields, "updated_at = NOW()")
 
-	// Add id as last parameter
-	args = append(args, req.Id)
+	// Append WHERE args after SET args
+	args = append(args, whereArgs...)
 
-	query := fmt.Sprintf(`
-		UPDATE {{$.TableName}}
-		SET %s
-		WHERE id = ?
-	`, strings.Join(updateFields, ", "))
+	query := fmt.Sprintf(`UPDATE {{$.TableName}} SET %s %s`,
+		strings.Join(updateFields, ", "), whereClause)
 
-	_, err := h.execQuery(ctx, query, args...)
+	result, err := h.execQuery(ctx, query, args...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update {{$.EntityName | lower}}: %v", err)
 	}
 
-	result, err := h.Get{{$.EntityName}}(ctx, &pb.Get{{$.EntityName}}Request{Id: req.Id})
+	affected, err := result.RowsAffected()
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to get {{$.EntityName | lower}}")
+		return nil, status.Errorf(codes.Internal, "failed to read rows affected: %v", err)
 	}
+
+	// SELECT back the updated rows so the client gets the current state.
+	selectQuery := fmt.Sprintf(`SELECT {{$.SelectFieldsSQL}} FROM {{$.TableName}} %s`, whereClause)
+	rows, err := h.query(ctx, selectQuery, whereArgs...)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to read back updated {{$.EntityName | lower}}s: %v", err)
+	}
+	defer rows.Close()
+
+	entities := []*pb.{{$.EntityName}}{}
+	for rows.Next() {
+		entity, err := scan{{$.EntityName}}(rows)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to scan {{$.EntityName | lower}}: %v", err)
+		}
+		entities = append(entities, entity)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, status.Errorf(codes.Internal, "error iterating {{$.EntityName | lower}}s: %v", err)
+	}
+
 	return &pb.{{.ResponseType}}{
-		{{$.EntityName}}: result.Get{{$.EntityName}}(),
+		{{$.EntityName}}: entities,
+		AffectedCount: int32(affected),
 	}, nil
 }
 {{end}}
 
 {{if eq .Name (printf "Delete%s" $.EntityName)}}
-// Delete{{$.EntityName}} deletes a {{$.EntityName}} by ID
+// Delete{{$.EntityName}} deletes ALL rows matching Filters. Empty filter is rejected.
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
+	whereClause, whereArgs := build{{$.EntityName}}Where(req.GetFilters())
+	if whereClause == "" {
+		return nil, status.Error(codes.InvalidArgument, "filters are required for delete (empty filter would delete all rows)")
 	}
 
-	query := `DELETE FROM {{$.TableName}} WHERE id = ?`
+	query := fmt.Sprintf(`DELETE FROM {{$.TableName}} %s`, whereClause)
 
-	result, err := h.execQuery(ctx, query, req.Id)
+	result, err := h.execQuery(ctx, query, whereArgs...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete {{$.EntityName | lower}}: %v", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
+	affected, err := result.RowsAffected()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get rows affected: %v", err)
-	}
-
-	if rowsAffected == 0 {
-		return nil, status.Error(codes.NotFound, "{{$.EntityName | lower}} not found")
+		return nil, status.Errorf(codes.Internal, "failed to read rows affected: %v", err)
 	}
 
 	return &pb.{{.ResponseType}}{
-		Success: true,
+		AffectedCount: int32(affected),
 	}, nil
 }
 {{end}}
@@ -277,7 +334,6 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
-	// Default pagination
 	page := int32(1)
 	pageSize := int32(10)
 	sortBy := "created_at"
@@ -295,39 +351,19 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		descending = req.Search.Pagination.Descending
 	}
 
-	// Calculate offset
 	offset := (page - 1) * pageSize
 
-	// Build WHERE clause from filters
 	whereClause := ""
 	args := []interface{}{}
-	whiteMap := map[string]bool{
-		{{range $.FilterableFields}}"{{.}}": true,
-		{{end}}
-	}
 	if req.Search != nil && len(req.Search.Filters) > 0 {
-		whereConditions := []string{}
-		for _, filter := range req.Search.Filters {
-			if filter.GetCondition() != nil {
-				condition := filter.GetCondition()
-				if _, ok := whiteMap[condition.Field]; !ok {
-					continue
-				}
-				whereConditions = append(whereConditions, helper.BuildFilterCondition(condition, &args))
-			}
-		}
-		if len(whereConditions) > 0 {
-			whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
-		}
+		whereClause, args = build{{$.EntityName}}Where(req.Search.Filters)
 	}
 
-	// Build ORDER BY clause
 	sortDirection := "ASC"
 	if descending {
 		sortDirection = "DESC"
 	}
 
-	// Get total count
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM {{$.TableName}} %s", whereClause)
 	var total int32
 	err := h.queryRow(ctx, countQuery, args...).Scan(&total)
@@ -335,7 +371,6 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 		return nil, status.Errorf(codes.Internal, "failed to count {{$.EntityName | lower}}s: %v", err)
 	}
 
-	// Get entities with pagination
 	args = append(args, pageSize, offset)
 	query := fmt.Sprintf(`
 		SELECT {{$.SelectFieldsSQL}}
@@ -353,73 +388,18 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 
 	entities := []*pb.{{$.EntityName}}{}
 	for rows.Next() {
-		var entity pb.{{$.EntityName}}
-		var createdAt, updatedAt sql.NullTime
-		var createdBy, updatedBy sql.NullString
-		{{range $.EnumFields}}var {{.GoName}}Str string
-		{{end}}{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}var {{.GoName}}Null sql.NullString
-		{{else if eq .Type "int32"}}var {{.GoName}}Null sql.NullInt32
-		{{else if eq .Type "int64"}}var {{.GoName}}Null sql.NullInt64
-		{{else if eq .Type "bool"}}var {{.GoName}}Null sql.NullBool
-		{{end}}{{end}}
-		err := rows.Scan(
-			{{range $.ScanFields}}&{{.}},
-			{{end}}&createdAt,
-			&updatedAt,
-			&createdBy,
-			&updatedBy,
-		)
+		entity, err := scan{{$.EntityName}}(rows)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to scan {{$.EntityName | lower}}: %v", err)
 		}
-
-		{{range $.EnumFields}}{{$field := .}}// Convert {{.GoName}} string to enum
-		switch {{.GoName}}Str {
-		{{range .EnumValues}}case "{{. | lower}}":
-			entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{.}}
-		{{end}}default:
-			entity.{{$field.GoName}} = pb.{{$field.EnumType}}_{{$field.DefaultValue}}
-		}
-		{{end}}
-		if createdAt.Valid {
-			entity.CreatedAt = timestamppb.New(createdAt.Time)
-		}
-		if updatedAt.Valid {
-			entity.UpdatedAt = timestamppb.New(updatedAt.Time)
-		}
-		if createdBy.Valid {
-			entity.CreatedBy = createdBy.String
-		}
-		if updatedBy.Valid {
-			entity.UpdatedBy = updatedBy.String
-		}
-		{{range $.OptionalEntityFieldsData}}{{if eq .Type "string"}}if {{.GoName}}Null.Valid {
-			val := {{.GoName}}Null.String
-			entity.{{.GoName}} = &val
-		}
-		{{else if eq .Type "int32"}}if {{.GoName}}Null.Valid {
-			val := {{.GoName}}Null.Int32
-			entity.{{.GoName}} = &val
-		}
-		{{else if eq .Type "int64"}}if {{.GoName}}Null.Valid {
-			val := {{.GoName}}Null.Int64
-			entity.{{.GoName}} = &val
-		}
-		{{else if eq .Type "bool"}}if {{.GoName}}Null.Valid {
-			val := {{.GoName}}Null.Bool
-			entity.{{.GoName}} = &val
-		}
-		{{end}}{{end}}
-
-		entities = append(entities, &entity)
+		entities = append(entities, entity)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, status.Errorf(codes.Internal, "error iterating {{$.EntityName | lower}}s: %v", err)
 	}
 
 	return &pb.{{.ResponseType}}{
-		{{$.EntityName | pluralize}}: entities,
+		{{$.EntityName}}: entities,
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,

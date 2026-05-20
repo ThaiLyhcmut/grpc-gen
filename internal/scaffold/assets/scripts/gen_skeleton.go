@@ -62,8 +62,8 @@ func main() {
 		log.Fatalf("Failed to parse optional entity fields: %v", err)
 	}
 
-	// Parse update messages to get optional update fields
-	optionalUpdateFieldsMap, err := parser.ParseFieldsFromUpdateRequests(protoFile)
+	// Parse update messages to get optional and all update fields
+	optionalUpdateFieldsMap, allUpdateFieldsMap, err := parser.ParseFieldsFromUpdateRequests(protoFile)
 	if err != nil {
 		log.Fatalf("Failed to parse optional update fields: %v", err)
 	}
@@ -99,7 +99,7 @@ func main() {
 	for entityName, methods := range entityMethods {
 		if parser.IsCRUDEntity(methods) {
 			// Generate full CRUD handler
-			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, optionalEntityFieldsMap, optionalUpdateFieldsMap, modulePath)
+			generator.GenerateCRUDHandler(handlerDir, packagePath, entityName, methods, entityFields[entityName], enums, requiredFieldsMap, optionalFieldsMap, optionalEntityFieldsMap, optionalUpdateFieldsMap, allUpdateFieldsMap, modulePath)
 		} else {
 			// Generate simple entity handler
 			generator.GenerateEntityHandler(handlerDir, types.EntityHandlerData{

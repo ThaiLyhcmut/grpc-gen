@@ -10,6 +10,56 @@ import (
 	"gen_skeleton/utils"
 )
 
+// normalizeProtoType maps a proto3 scalar type to the Go type protoc emits.
+// Keeps the template-side branches simple: it only needs to know Go types
+// like "int32"/"float64", not every proto variant (sint32, sfixed64, ...).
+func normalizeProtoType(protoType string) string {
+	switch protoType {
+	case "int32", "sint32", "sfixed32":
+		return "int32"
+	case "int64", "sint64", "sfixed64":
+		return "int64"
+	case "uint32", "fixed32":
+		return "uint32"
+	case "uint64", "fixed64":
+		return "uint64"
+	case "float":
+		return "float32"
+	case "double":
+		return "float64"
+	case "bytes":
+		return "[]byte"
+	default:
+		return protoType
+	}
+}
+
+// defaultValueFor returns the Go literal used to initialize a local var for an
+// optional field in the Create handler before the request value is copied in.
+func defaultValueFor(goType string) string {
+	switch goType {
+	case "string":
+		return `""`
+	case "int32":
+		return "int32(0)"
+	case "int64":
+		return "int64(0)"
+	case "uint32":
+		return "uint32(0)"
+	case "uint64":
+		return "uint64(0)"
+	case "float32":
+		return "float32(0)"
+	case "float64":
+		return "float64(0)"
+	case "bool":
+		return "false"
+	case "[]byte":
+		return "[]byte(nil)"
+	}
+	return ""
+}
+
 // ParseProtoFile extracts RPC methods from proto file
 func ParseProtoFile(filename string) ([]types.Method, error) {
 	file, err := os.Open(filename)
@@ -79,15 +129,17 @@ func ParseEnumsFromProto(filename string) (map[string][]string, error) {
 	return enums, scanner.Err()
 }
 
-// ParseFieldsFromUpdateRequests extracts optional fields from UpdateXRequest messages
-func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, error) {
+// ParseFieldsFromUpdateRequests extracts all fields from UpdateXRequest messages
+// Returns: optionalUpdateFields (fields marked optional), allUpdateFields (all fields in UpdateRequest)
+func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, map[string][]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer file.Close()
 
 	optionalUpdateFields := make(map[string][]string)
+	allUpdateFields := make(map[string][]string)
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+Update(\w+)Request\s*\{`)
@@ -104,6 +156,7 @@ func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, error)
 			currentEntity = matches[1]
 			inMessage = true
 			optionalUpdateFields[currentEntity] = []string{}
+			allUpdateFields[currentEntity] = []string{}
 			continue
 		}
 
@@ -121,16 +174,20 @@ func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, error)
 					continue
 				}
 
-				// Only track optional fields
+				dbFieldName := utils.ToSnakeCase(fieldName)
+
+				// Track all fields in UpdateRequest
+				allUpdateFields[currentEntity] = append(allUpdateFields[currentEntity], dbFieldName)
+
+				// Track optional fields separately
 				if isOptional {
-					dbFieldName := utils.ToSnakeCase(fieldName)
 					optionalUpdateFields[currentEntity] = append(optionalUpdateFields[currentEntity], dbFieldName)
 				}
 			}
 		}
 	}
 
-	return optionalUpdateFields, scanner.Err()
+	return optionalUpdateFields, allUpdateFields, scanner.Err()
 }
 
 // ParseFieldsFromCreateRequests extracts required and optional fields from CreateXRequest messages
@@ -292,7 +349,7 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 				field := types.Field{
 					Name:       fieldName,
 					ProtoName:  utils.ToSnakeCase(fieldName),
-					Type:       fieldType,
+					Type:       normalizeProtoType(fieldType),
 					GoName:     utils.ToCamelCase(fieldName),
 					DBField:    utils.ToSnakeCase(fieldName),
 					IsOptional: isOptional,
@@ -307,16 +364,12 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 						field.DefaultValue = field.EnumValues[0]
 						field.DefaultDBValue = strings.ToLower(field.EnumValues[0])
 					}
-				} else if fieldType == "string" {
-					field.DefaultValue = `""`
-				} else if fieldType == "int32" {
-					field.DefaultValue = "int32(0)"
-				} else if fieldType == "int64" {
-					field.DefaultValue = "int64(0)"
-				} else if fieldType == "bool" {
-					field.DefaultValue = "false"
 				} else if strings.Contains(fieldType, "Timestamp") {
 					field.IsTimestamp = true
+					// No DefaultValue: the template has a dedicated IsTimestamp branch
+					// for Create/Update that uses interface{} + AsTime() instead.
+				} else {
+					field.DefaultValue = defaultValueFor(field.Type)
 				}
 
 				entityFields[currentMessage] = append(entityFields[currentMessage], field)
@@ -372,10 +425,11 @@ func GroupMethodsByEntity(methods []types.Method) map[string][]types.Method {
 	return entityMethods
 }
 
-// IsCRUDEntity checks if methods represent a full CRUD entity
+// IsCRUDEntity checks if methods represent a full CRUD entity.
+// Get is no longer required: detail-by-id is just List with an id filter,
+// and Create inlines its read-back SELECT instead of calling Get.
 func IsCRUDEntity(methods []types.Method) bool {
 	hasCreate := false
-	hasGet := false
 	hasUpdate := false
 	hasDelete := false
 	hasList := false
@@ -383,8 +437,6 @@ func IsCRUDEntity(methods []types.Method) bool {
 	for _, m := range methods {
 		if strings.HasPrefix(m.Name, "Create") {
 			hasCreate = true
-		} else if strings.HasPrefix(m.Name, "Get") && !strings.HasPrefix(m.Name, "List") {
-			hasGet = true
 		} else if strings.HasPrefix(m.Name, "Update") {
 			hasUpdate = true
 		} else if strings.HasPrefix(m.Name, "Delete") {
@@ -394,5 +446,5 @@ func IsCRUDEntity(methods []types.Method) bool {
 		}
 	}
 
-	return hasCreate && hasGet && hasUpdate && hasDelete && hasList
+	return hasCreate && hasUpdate && hasDelete && hasList
 }

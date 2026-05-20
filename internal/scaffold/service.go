@@ -52,115 +52,93 @@ func createServiceProto(filename, serviceLower, serviceTitle string) error {
 
 	// Get entity name with proper case (e.g., user -> User, post-type -> PostType)
 	entityName := toEntityName(serviceLower)
-	entityNamePlural := entityName + "s"
-	// Get snake_case versions for field names (User -> user, PostType -> post_type)
 	entityNameSnake := toSnakeCase(entityName)
-	entityNameSnakePlural := entityNameSnake + "s"
 
-	content := fmt.Sprintf(`syntax = "proto3";
+	tmpl := `syntax = "proto3";
 
-package %s;
+package {ServiceLower};
 
-option go_package = "%s/proto/%s";
+option go_package = "{Module}/proto/{ServiceLower}";
 
 import "google/protobuf/timestamp.proto";
 import "proto/common/common.proto";
 
-// ============= %s Entity =============
-// Example structure - uncomment and modify as needed:
-//
-message %s {
+// ============= {Entity} Entity =============
+// Note: created_by/updated_by are optional so NULL in MySQL can be represented as nil (not "").
+message {Entity} {
   string id = 1;
   string name = 2;
-  %sStatus status = 3;
+  {Entity}Status status = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
-  string created_by = 6;
-  string updated_by = 7;
+  optional string created_by = 6;
+  optional string updated_by = 7;
 }
 
-enum %sStatus {
+enum {Entity}Status {
   ACTIVE = 0;
   INACTIVE = 1;
 }
 
-message Create%sRequest {
+message Create{Entity}Request {
   string name = 1;
-  %sStatus status = 2;
+  {Entity}Status status = 2;
   string created_by = 3;
 }
 
-message Create%sResponse {
-  %s %s = 1;
+message Create{Entity}Response {
+  {Entity} {EntitySnake} = 1;
 }
 
-message Get%sRequest {
-  string id = 1;
-}
-
-message Get%sResponse {
-  %s %s = 1;
-}
-
-message Update%sRequest {
-  string id = 1;
+// Update by filter: applies the given field changes to ALL rows matching filters.
+message Update{Entity}Request {
+  repeated common.FilterCriteria filters = 1;
   optional string name = 2;
-  optional %sStatus status = 3;
+  optional {Entity}Status status = 3;
   string updated_by = 4;
 }
 
-message Update%sResponse {
-  %s %s = 1;
+message Update{Entity}Response {
+  repeated {Entity} {EntitySnake} = 1;
+  int32 affected_count = 2;
 }
 
-message Delete%sRequest {
-  string id = 1;
+// Delete by filter: deletes ALL rows matching filters. Empty filters is rejected.
+message Delete{Entity}Request {
+  repeated common.FilterCriteria filters = 1;
 }
 
-message Delete%sResponse {
-  bool success = 1;
+message Delete{Entity}Response {
+  int32 affected_count = 1;
 }
 
-message List%sRequest {
+message List{Entity}Request {
   common.SearchRequest search = 1;
 }
 
-message List%sResponse {
-  repeated %s %s = 1;
+message List{Entity}Response {
+  repeated {Entity} {EntitySnake} = 1;
   int32 total = 2;
   int32 page = 3;
   int32 page_size = 4;
 }
 
 // ============= Service =============
-service %sService {
-  // Uncomment and modify these RPC methods as needed:
-  rpc Create%s(Create%sRequest) returns (Create%sResponse);
-  rpc Get%s(Get%sRequest) returns (Get%sResponse);
-  rpc Update%s(Update%sRequest) returns (Update%sResponse);
-  rpc Delete%s(Delete%sRequest) returns (Delete%sResponse);
-  rpc List%s(List%sRequest) returns (List%sResponse);
+service {Service}Service {
+  rpc Create{Entity}(Create{Entity}Request) returns (Create{Entity}Response);
+  rpc Update{Entity}(Update{Entity}Request) returns (Update{Entity}Response);
+  rpc Delete{Entity}(Delete{Entity}Request) returns (Delete{Entity}Response);
+  rpc List{Entity}(List{Entity}Request) returns (List{Entity}Response);
 }
-`, serviceLower, modulePath, serviceLower,
-		entityName,
-		entityName, entityName,
-		entityName,
-		entityName, entityName,
-		entityName, entityName, entityNameSnake,
-		entityName,
-		entityName, entityName, entityNameSnake,
-		entityName, entityName,
-		entityName, entityName, entityNameSnake,
-		entityName,
-		entityName,
-		entityNamePlural,
-		entityNamePlural, entityName, entityNameSnakePlural,
-		serviceTitle,
-		entityName, entityName, entityName,
-		entityName, entityName, entityName,
-		entityName, entityName, entityName,
-		entityName, entityName, entityName,
-		entityNamePlural, entityNamePlural, entityNamePlural)
+`
+
+	content := strings.NewReplacer(
+		"{ServiceLower}", serviceLower,
+		"{Module}", modulePath,
+		"{Service}", serviceTitle,
+		"{EntitySnake}", entityNameSnake,
+		"{Entity}", entityName,
+	).Replace(tmpl)
 
 	return os.WriteFile(filename, []byte(content), 0644)
 }
