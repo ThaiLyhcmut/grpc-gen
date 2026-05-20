@@ -24,6 +24,22 @@ package common;
 
 option go_package = "%s/proto/common";
 
+import "google/protobuf/descriptor.proto";
+
+// ============= Field Annotation =============
+// Block a field from being used in List/Update/Delete filter conditions.
+// Default is allow — only annotate the fields you want to BLOCK (passwords,
+// secrets, internal flags). The server rejects denied fields with
+// InvalidArgument when FILTER_STRICT is on (default).
+//
+//   message User {
+//     string name = 2;                                  // filterable (default)
+//     string password = 3 [(common.filterable) = false]; // BLOCKED
+//   }
+extend google.protobuf.FieldOptions {
+  bool filterable = 50001;
+}
+
 // ============= Filter Operators =============
 enum FilterOperator {
   EQUAL = 0;              // =

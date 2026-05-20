@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	pb "{{.PackagePath}}"
 	commonpb "{{.ModulePath}}/proto/common"
@@ -106,17 +107,21 @@ func scan{{$.EntityName}}(scanner interface{ Scan(...interface{}) error }) (*pb.
 	return &entity, nil
 }
 
-// build{{$.EntityName}}Where assembles a WHERE clause from FilterCriteria. Delegates
-// to helper.BuildWhereClause which supports both single conditions and nested
-// FilterGroup (AND/OR) — including recursion — and applies the whitelist.
-func build{{$.EntityName}}Where(filters []*commonpb.FilterCriteria) (string, []interface{}) {
-	whiteMap := map[string]bool{
-		{{range $.FilterableFields}}"{{.}}": true,
-		{{end}}
-	}
+// build{{$.EntityName}}Where assembles a WHERE clause from FilterCriteria using
+// the whitelist defined in {{$.EntityName | lower}}_filterable.go. Supports nested
+// FilterGroup (AND/OR) via helper recursion.
+//
+// Mode is controlled by FILTER_STRICT env (default = strict):
+//   - strict (default): unknown field → InvalidArgument listing every rejected
+//     field across the whole filter tree.
+//   - FILTER_STRICT=false: unknown fields are silently dropped (legacy).
+func build{{$.EntityName}}Where(filters []*commonpb.FilterCriteria) (string, []interface{}, error) {
 	args := []interface{}{}
-	whereClause := helper.BuildWhereClause(filters, &args, whiteMap)
-	return whereClause, args
+	if os.Getenv("FILTER_STRICT") == "false" {
+		return helper.BuildWhereClause(filters, &args, {{$.EntityName}}FilterableFields), args, nil
+	}
+	clause, err := helper.BuildWhereClauseStrict(filters, &args, {{$.EntityName}}FilterableFields)
+	return clause, args, err
 }
 
 {{range .Methods}}
@@ -211,7 +216,10 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
-	whereClause, whereArgs := build{{$.EntityName}}Where(req.GetFilters())
+	whereClause, whereArgs, err := build{{$.EntityName}}Where(req.GetFilters())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if whereClause == "" {
 		return nil, status.Error(codes.InvalidArgument, "filters are required for update (empty filter would update all rows)")
 	}
@@ -306,7 +314,10 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.{{.ResponseType}}, error) {
 	defer logger.TraceFunction(ctx)()
 
-	whereClause, whereArgs := build{{$.EntityName}}Where(req.GetFilters())
+	whereClause, whereArgs, err := build{{$.EntityName}}Where(req.GetFilters())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if whereClause == "" {
 		return nil, status.Error(codes.InvalidArgument, "filters are required for delete (empty filter would delete all rows)")
 	}
@@ -356,7 +367,11 @@ func (h *Handler) {{.Name}}(ctx context.Context, req *pb.{{.RequestType}}) (*pb.
 	whereClause := ""
 	args := []interface{}{}
 	if req.Search != nil && len(req.Search.Filters) > 0 {
-		whereClause, args = build{{$.EntityName}}Where(req.Search.Filters)
+		var err error
+		whereClause, args, err = build{{$.EntityName}}Where(req.Search.Filters)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 	}
 
 	sortDirection := "ASC"

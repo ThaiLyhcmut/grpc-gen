@@ -39,6 +39,7 @@ type Field struct {
 	IsOptional     bool
 	IsEnum         bool
 	IsTimestamp    bool // True for custom timestamps like due_date (not system timestamps)
+	IsFilterable   bool // True if proto field has [(common.filterable) = true]
 }
 
 type CRUDHandlerData struct {

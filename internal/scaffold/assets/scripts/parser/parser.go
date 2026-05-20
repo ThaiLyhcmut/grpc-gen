@@ -87,46 +87,30 @@ func ParseProtoFile(filename string) ([]types.Method, error) {
 	return methods, scanner.Err()
 }
 
-// ParseEnumsFromProto extracts enum definitions from proto file
+// ParseEnumsFromProto extracts enum definitions. Works for both multi-line
+// (`enum X {\n  A = 0;\n}`) and single-line (`enum X { A = 0; B = 1; }`)
+// formats by parsing the whole file body with a DOTALL regex.
 func ParseEnumsFromProto(filename string) (map[string][]string, error) {
-	file, err := os.Open(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
 	enums := make(map[string][]string)
-	scanner := bufio.NewScanner(file)
+	enumBlockRegex := regexp.MustCompile(`(?s)enum\s+(\w+)\s*\{(.*?)\}`)
+	valueRegex := regexp.MustCompile(`(\w+)\s*=\s*\d+\s*;`)
 
-	enumRegex := regexp.MustCompile(`enum\s+(\w+)\s*\{`)
-	enumValueRegex := regexp.MustCompile(`^\s*(\w+)\s*=\s*\d+;`)
-
-	var currentEnum string
-	inEnum := false
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Check if starting an enum
-		if matches := enumRegex.FindStringSubmatch(line); len(matches) == 2 {
-			currentEnum = matches[1]
-			inEnum = true
-			enums[currentEnum] = []string{}
-			continue
+	for _, m := range enumBlockRegex.FindAllStringSubmatch(string(data), -1) {
+		name := m[1]
+		body := m[2]
+		values := []string{}
+		for _, vm := range valueRegex.FindAllStringSubmatch(body, -1) {
+			values = append(values, vm[1])
 		}
-
-		// Check if inside enum
-		if inEnum {
-			if strings.Contains(line, "}") {
-				inEnum = false
-				currentEnum = ""
-			} else if matches := enumValueRegex.FindStringSubmatch(line); len(matches) == 2 {
-				enums[currentEnum] = append(enums[currentEnum], matches[1])
-			}
-		}
+		enums[name] = values
 	}
 
-	return enums, scanner.Err()
+	return enums, nil
 }
 
 // ParseFieldsFromUpdateRequests extracts all fields from UpdateXRequest messages
@@ -143,7 +127,7 @@ func ParseFieldsFromUpdateRequests(filename string) (map[string][]string, map[st
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+Update(\w+)Request\s*\{`)
-	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+\s*(?:\[.*?\])?\s*;`)
 
 	var currentEntity string
 	inMessage := false
@@ -203,7 +187,7 @@ func ParseFieldsFromCreateRequests(filename string) (map[string][]string, map[st
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+Create(\w+)Request\s*\{`)
-	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+\s*(?:\[.*?\])?\s*;`)
 
 	var currentEntity string
 	inMessage := false
@@ -257,7 +241,7 @@ func ParseEntityOptionalFields(filename string) (map[string][]string, error) {
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+(\w+)\s*\{`)
-	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+\s*(?:\[.*?\])?\s*;`)
 
 	var currentEntity string
 	inMessage := false
@@ -297,19 +281,33 @@ func ParseEntityOptionalFields(filename string) (map[string][]string, error) {
 	return optionalEntityFields, scanner.Err()
 }
 
-// ParseEntityFields extracts field information from entity messages
-func ParseEntityFields(filename string, enums map[string][]string) (map[string][]types.Field, error) {
+// ParseEntityFields extracts field information from entity messages. Returns:
+//   - entityFields: per-entity list of non-system fields (used for scan/CRUD)
+//   - blockedSystemFields: per-entity set of system fields explicitly marked
+//     `[(common.filterable) = false]` so the generator can subtract them from
+//     the system-field filter defaults. System fields are still skipped from
+//     scan logic, but their filterability is now configurable.
+func ParseEntityFields(filename string, enums map[string][]string) (map[string][]types.Field, map[string]map[string]bool, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer file.Close()
 
 	entityFields := make(map[string][]types.Field)
+	blockedSystemFields := make(map[string]map[string]bool)
 	scanner := bufio.NewScanner(file)
 
 	messageRegex := regexp.MustCompile(`message\s+(\w+)\s*\{`)
-	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+;`)
+	// Field regex captures: optional?, type, name, tag, optional [annotations]
+	fieldRegex := regexp.MustCompile(`^\s*(optional\s+)?(\w+(?:\.\w+\.\w+)?)\s+(\w+)\s*=\s*\d+\s*(?:\[(.*?)\])?\s*;`)
+	// Matches (common.filterable) = true|false inside the annotation block.
+	filterableAnnotRegex := regexp.MustCompile(`\(\s*common\.filterable\s*\)\s*=\s*(true|false)`)
+
+	systemFieldNames := map[string]bool{
+		"id": true, "created_at": true, "updated_at": true,
+		"created_by": true, "updated_by": true,
+	}
 
 	var currentMessage string
 	inMessage := false
@@ -325,6 +323,7 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 				currentMessage = msgName
 				inMessage = true
 				entityFields[currentMessage] = []types.Field{}
+				blockedSystemFields[currentMessage] = map[string]bool{}
 			}
 			continue
 		}
@@ -338,21 +337,37 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 				isOptional := matches[1] != ""
 				fieldType := matches[2]
 				fieldName := matches[3]
+				annotations := ""
+				if len(matches) >= 5 {
+					annotations = matches[4]
+				}
 
-				// Skip system fields (id, timestamps, created_by, updated_by)
-				// These fields are handled separately
-				if fieldName == "id" || fieldName == "created_at" || fieldName == "updated_at" ||
-					fieldName == "created_by" || fieldName == "updated_by" {
+				// System fields are skipped from regular field iteration (scan logic
+				// handles them separately) BUT we still parse the annotation so the
+				// generator can know if the user wants to block them from filter.
+				if systemFieldNames[fieldName] {
+					if m := filterableAnnotRegex.FindStringSubmatch(annotations); len(m) == 2 && m[1] == "false" {
+						blockedSystemFields[currentMessage][fieldName] = true
+					}
 					continue
 				}
 
+				// Default allow: every field is filterable unless explicitly marked
+				// with [(common.filterable) = false] in the proto. This means you
+				// only need to annotate sensitive fields (password, secret, ...).
+				isFilterable := true
+				if m := filterableAnnotRegex.FindStringSubmatch(annotations); len(m) == 2 {
+					isFilterable = m[1] == "true"
+				}
+
 				field := types.Field{
-					Name:       fieldName,
-					ProtoName:  utils.ToSnakeCase(fieldName),
-					Type:       normalizeProtoType(fieldType),
-					GoName:     utils.ToCamelCase(fieldName),
-					DBField:    utils.ToSnakeCase(fieldName),
-					IsOptional: isOptional,
+					Name:         fieldName,
+					ProtoName:    utils.ToSnakeCase(fieldName),
+					Type:         normalizeProtoType(fieldType),
+					GoName:       utils.ToCamelCase(fieldName),
+					DBField:      utils.ToSnakeCase(fieldName),
+					IsOptional:   isOptional,
+					IsFilterable: isFilterable,
 				}
 
 				// Check if enum
@@ -377,7 +392,7 @@ func ParseEntityFields(filename string, enums map[string][]string) (map[string][
 		}
 	}
 
-	return entityFields, scanner.Err()
+	return entityFields, blockedSystemFields, scanner.Err()
 }
 
 // GroupMethodsByEntity groups RPC methods by their entity name

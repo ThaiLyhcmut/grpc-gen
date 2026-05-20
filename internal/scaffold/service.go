@@ -64,7 +64,13 @@ import "google/protobuf/timestamp.proto";
 import "proto/common/common.proto";
 
 // ============= {Entity} Entity =============
-// Note: created_by/updated_by are optional so NULL in MySQL can be represented as nil (not "").
+// Field-level annotation (optional):
+//   [(common.filterable) = false] → BLOCK this field from List/Update/Delete
+//   filters. Default is allow, so only annotate sensitive fields (password,
+//   secret, ...). When FILTER_STRICT is on (default), the server rejects
+//   denied fields with InvalidArgument.
+//
+// created_by/updated_by are optional so MySQL NULL → nil (not "").
 message {Entity} {
   string id = 1;
   string name = 2;

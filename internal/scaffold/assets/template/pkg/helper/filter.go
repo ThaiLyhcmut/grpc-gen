@@ -6,11 +6,28 @@ import (
 	pbCommon "thaily/proto/common"
 )
 
-// BuildFilterCondition builds SQL WHERE condition from FilterCondition (MySQL syntax with ?)
+// BuildFilterCondition builds SQL WHERE condition from FilterCondition (MySQL
+// syntax with ?). Defensive: malformed conditions (missing/empty values for
+// the operator) fall through to "1=1" rather than panicking on out-of-range
+// access, so a client cannot crash the server by sending a partial filter.
 func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface{}) string {
 	field := condition.Field
 	operator := condition.Operator
 	values := condition.Values
+
+	// Operators that need exactly one value
+	switch operator {
+	case pbCommon.FilterOperator_EQUAL,
+		pbCommon.FilterOperator_NOT_EQUAL,
+		pbCommon.FilterOperator_GREATER_THAN,
+		pbCommon.FilterOperator_GREATER_THAN_EQUAL,
+		pbCommon.FilterOperator_LESS_THAN,
+		pbCommon.FilterOperator_LESS_THAN_EQUAL,
+		pbCommon.FilterOperator_LIKE:
+		if len(values) == 0 {
+			return "1=1"
+		}
+	}
 
 	switch operator {
 	case pbCommon.FilterOperator_EQUAL:
@@ -35,6 +52,9 @@ func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface
 		*args = append(*args, "%"+values[0]+"%")
 		return fmt.Sprintf("%s LIKE ?", field)
 	case pbCommon.FilterOperator_IN:
+		if len(values) == 0 {
+			return "1=1"
+		}
 		placeholders := []string{}
 		for _, val := range values {
 			*args = append(*args, val)
@@ -42,6 +62,9 @@ func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface
 		}
 		return fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ", "))
 	case pbCommon.FilterOperator_NOT_IN:
+		if len(values) == 0 {
+			return "1=1"
+		}
 		placeholders := []string{}
 		for _, val := range values {
 			*args = append(*args, val)
@@ -53,10 +76,11 @@ func BuildFilterCondition(condition *pbCommon.FilterCondition, args *[]interface
 	case pbCommon.FilterOperator_IS_NOT_NULL:
 		return fmt.Sprintf("%s IS NOT NULL", field)
 	case pbCommon.FilterOperator_BETWEEN:
-		if len(values) >= 2 {
-			*args = append(*args, values[0], values[1])
-			return fmt.Sprintf("%s BETWEEN ? AND ?", field)
+		if len(values) < 2 {
+			return "1=1"
 		}
+		*args = append(*args, values[0], values[1])
+		return fmt.Sprintf("%s BETWEEN ? AND ?", field)
 	}
 
 	return "1=1" // fallback
@@ -189,4 +213,62 @@ func BuildWhereClause(filters []*pbCommon.FilterCriteria, args *[]interface{}, w
 	}
 
 	return "WHERE " + strings.Join(whereConditions, " AND ")
+}
+
+// FilterValidationError lists every field that appeared in the filter tree
+// but was not present in the whitelist. Distinct, source-order preserved.
+type FilterValidationError struct {
+	InvalidFields []string
+}
+
+func (e *FilterValidationError) Error() string {
+	return "filter fields not allowed: " + strings.Join(e.InvalidFields, ", ")
+}
+
+// BuildWhereClauseStrict is like BuildWhereClause but fails fast when any
+// condition references a field outside whiteMap. It traverses the entire
+// tree (including nested groups) and reports ALL invalid fields in one go,
+// so the client can fix them in a single round-trip.
+//
+// On error, args is left untouched (no partial mutation).
+func BuildWhereClauseStrict(filters []*pbCommon.FilterCriteria, args *[]interface{}, whiteMap map[string]bool) (string, error) {
+	if len(filters) == 0 {
+		return "", nil
+	}
+
+	invalid := collectInvalidFilterFields(filters, whiteMap)
+	if len(invalid) > 0 {
+		return "", &FilterValidationError{InvalidFields: invalid}
+	}
+
+	return BuildWhereClause(filters, args, whiteMap), nil
+}
+
+// collectInvalidFilterFields walks the filter tree and returns each distinct
+// field name that is not in whiteMap, in the order first encountered.
+func collectInvalidFilterFields(filters []*pbCommon.FilterCriteria, whiteMap map[string]bool) []string {
+	seen := map[string]bool{}
+	var out []string
+	var walk func(*pbCommon.FilterCriteria)
+	walk = func(c *pbCommon.FilterCriteria) {
+		if c == nil {
+			return
+		}
+		if cond := c.GetCondition(); cond != nil {
+			if _, ok := whiteMap[cond.Field]; !ok && !seen[cond.Field] {
+				seen[cond.Field] = true
+				out = append(out, cond.Field)
+			}
+			return
+		}
+		if grp := c.GetGroup(); grp != nil {
+			for _, child := range grp.Filters {
+				walk(child)
+			}
+		}
+	}
+	for _, f := range filters {
+		walk(f)
+	}
+	return out
 }

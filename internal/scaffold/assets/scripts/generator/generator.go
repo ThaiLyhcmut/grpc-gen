@@ -53,6 +53,28 @@ func GenerateHandlerRoot(handlerDir string, data types.HandlerData) {
 	log.Printf("Generated %s\n", outPath)
 }
 
+// GenerateFilterableFile writes the per-entity filterable whitelist file derived
+// from `[(common.filterable) = true]` annotations in the proto. Always
+// overwritten on regen — the proto is the source of truth, not this file.
+func GenerateFilterableFile(handlerDir, entityName string, filterableFields []string) {
+	outPath := filepath.Join(handlerDir, strings.ToLower(entityName)+"_filterable.go")
+	tmpl, err := template.New("filterable.tmpl").Funcs(template.FuncMap{
+		"lower": strings.ToLower,
+	}).ParseFiles("template/filterable.tmpl")
+	if err != nil {
+		log.Fatal(err)
+	}
+	data := struct {
+		EntityName       string
+		FilterableFields []string
+	}{
+		EntityName:       entityName,
+		FilterableFields: filterableFields,
+	}
+	renderAndWriteGo(tmpl, data, outPath)
+	log.Printf("Generated %s\n", outPath)
+}
+
 // GenerateEntityHandler creates a simple entity handler from template
 func GenerateEntityHandler(handlerDir string, data types.EntityHandlerData) {
 	tmpl, err := template.ParseFiles("template/entity_handler.tmpl")
@@ -65,14 +87,24 @@ func GenerateEntityHandler(handlerDir string, data types.EntityHandlerData) {
 }
 
 // GenerateCRUDHandler creates a full CRUD handler from template
-func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, allUpdateFieldsMap map[string][]string, modulePath string) {
+func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []types.Method, fields []types.Field, enums map[string][]string, requiredFieldsMap map[string][]string, optionalFieldsMap map[string][]string, optionalEntityFieldsMap map[string][]string, optionalUpdateFieldsMap map[string][]string, allUpdateFieldsMap map[string][]string, blockedSystemFields map[string]bool, modulePath string) {
 	// Prepare data for template
 	requiredFields := []types.Field{}
 	optionalFields := []types.Field{}
 	enumFields := []types.Field{}
 	createFields := []types.Field{}
 	updateFields := []types.Field{}
+	// System fields are filterable by default (parser handles their scan
+	// specially but client should still be able to filter by id, created_at,
+	// etc.). User can block individually via `[(common.filterable) = false]`
+	// in the proto — that gets surfaced via blockedSystemFields.
+	systemFields := []string{"id", "created_at", "updated_at", "created_by", "updated_by"}
 	filterableFields := []string{}
+	for _, sf := range systemFields {
+		if !blockedSystemFields[sf] {
+			filterableFields = append(filterableFields, sf)
+		}
+	}
 	scanFields := []string{}
 
 	var enumType string
@@ -107,9 +139,11 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 			enumType = field.EnumType
 		}
 
-		// All scalar/timestamp fields are filterable. Client passes ISO/MySQL
-		// datetime strings for Timestamp columns; MySQL coerces them on compare.
-		filterableFields = append(filterableFields, field.DBField)
+		// Default deny: only fields explicitly annotated with
+		// `[(common.filterable) = true]` in the proto are added to the whitelist.
+		if field.IsFilterable {
+			filterableFields = append(filterableFields, field.DBField)
+		}
 
 		// Mark field as optional if it's in optionalFieldsMap (MUST DO THIS FIRST)
 		if optionalFieldNames[field.DBField] {
@@ -273,26 +307,32 @@ func GenerateCRUDHandler(handlerDir, packagePath, entityName string, methods []t
 	outPath := filepath.Join(handlerDir, strings.ToLower(entityName)+".go")
 	renderAndWriteGo(tmpl, data, outPath)
 	log.Printf("Generated CRUD handler %s\n", outPath)
+
+	// Scaffold the per-entity filterable whitelist file (once).
+	GenerateFilterableFile(handlerDir, entityName, filterableFields)
 }
 
-// GenerateEnvFile creates .env file from template
+// GenerateEnvFile creates .env file from template. Skips if the file already
+// exists so user-edited DB credentials are preserved across regenerations.
 func GenerateEnvFile(protoName string, data types.Data) {
+	filename := filepath.Join("env", protoName+".env")
+	if _, err := os.Stat(filename); err == nil {
+		log.Printf("Skipped %s (already exists)\n", filename)
+		return
+	}
+
 	tmpl, err := template.ParseFiles("template/env.tmpl")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	filename := filepath.Join("env", protoName+".env")
 	out, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer out.Close()
-
 	if err := tmpl.Execute(out, data); err != nil {
 		log.Fatal(err)
 	}
-
 	log.Printf("Generated %s\n", filename)
 }
 
@@ -351,23 +391,26 @@ func GenerateGitignore(protoName string) {
 	log.Printf("Generated %s\n", filename)
 }
 
-// GenerateServiceEnvFile creates service-level .env file
+// GenerateServiceEnvFile creates service-level .env file. Skips if exists
+// (preserves user-edited DB credentials).
 func GenerateServiceEnvFile(protoName string, data types.Data) {
+	filename := filepath.Join("src", "service", protoName, protoName+".env")
+	if _, err := os.Stat(filename); err == nil {
+		log.Printf("Skipped %s (already exists)\n", filename)
+		return
+	}
+
 	tmpl, err := template.ParseFiles("template/env.tmpl")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	filename := filepath.Join("src", "service", protoName, protoName+".env")
 	out, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer out.Close()
-
 	if err := tmpl.Execute(out, data); err != nil {
 		log.Fatal(err)
 	}
-
 	log.Printf("Generated %s\n", filename)
 }

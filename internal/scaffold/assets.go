@@ -21,6 +21,7 @@ func copyTemplates() error {
 		"docker-compose.tmpl",
 		"entity_handler.tmpl",
 		"env.tmpl",
+		"filterable.tmpl",
 		"handler.tmpl",
 		"main.tmpl",
 	}
