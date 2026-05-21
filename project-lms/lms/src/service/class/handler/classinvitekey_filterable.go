@@ -20,5 +20,6 @@ var ClassInviteKeyFilterableFields = map[string]bool{
 	"expires_at":            true,
 	"used_at":               true,
 	"used_by_student_id":    true,
+	"target_student_id":     true,
 	"status":                true,
 }

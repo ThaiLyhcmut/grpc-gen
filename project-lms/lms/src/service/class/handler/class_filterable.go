@@ -21,4 +21,5 @@ var ClassFilterableFields = map[string]bool{
 	"cover_url":    true,
 	"status":       true,
 	"max_students": true,
+	"visibility":   true,
 }

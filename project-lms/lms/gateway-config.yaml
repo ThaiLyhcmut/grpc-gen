@@ -1,0 +1,266 @@
+# Relations between entities across services.
+# Used by `grpc-gen add-gateway` to add relation fields to GraphQL schemas.
+
+entities:
+  User:
+    service: user
+    op_auth: { create: ADMIN, update: ADMIN, delete: ADMIN, list: "*", get: "*" }
+    # Field-level authz. field_auth = static role gate (@auth); field_policy
+    # = Casbin rule object-name (@policy) evaluated against the policy-engine
+    # MongoDB. Guarded fields become nullable so a denial resolves to null.
+    field_auth:
+      password_hash: ADMIN
+    field_policy:
+      email: "User.email"
+    relations:
+      teacher_profile:
+        target: TeacherProfile
+        kind: hasOne
+        foreign_key: user_id
+      student_profile:
+        target: StudentProfile
+        kind: hasOne
+        foreign_key: user_id
+      taught_classes:
+        target: Class
+        kind: hasMany
+        foreign_key: teacher_id
+      enrollments:
+        target: Enrollment
+        kind: hasMany
+        foreign_key: student_id
+
+  TeacherProfile:
+    service: user
+    op_auth: { create: ADMIN, update: ADMIN, delete: ADMIN }
+    relations:
+      user:
+        target: User
+        kind: belongsTo
+        local_key: user_id
+
+  StudentProfile:
+    service: user
+    op_auth: { create: ADMIN, update: ADMIN, delete: ADMIN }
+    relations:
+      user:
+        target: User
+        kind: belongsTo
+        local_key: user_id
+
+  Class:
+    service: class
+    op_auth: { create: TEACHER, update: TEACHER, delete: ADMIN }
+    relations:
+      teacher:
+        target: User
+        kind: belongsTo
+        local_key: teacher_id
+      enrollments:
+        target: Enrollment
+        kind: hasMany
+        foreign_key: class_id
+      lessons:
+        target: Lesson
+        kind: hasMany
+        foreign_key: class_id
+
+  Enrollment:
+    service: class
+    op_auth: { create: STUDENT, update: TEACHER, delete: TEACHER }
+    relations:
+      class:
+        target: Class
+        kind: belongsTo
+        local_key: class_id
+      student:
+        target: User
+        kind: belongsTo
+        local_key: student_id
+
+  Lesson:
+    service: lesson
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      class:
+        target: Class
+        kind: belongsTo
+        local_key: class_id
+      videos:
+        target: LessonVideo
+        kind: hasMany
+        foreign_key: lesson_id
+      attendance:
+        target: LessonAttendance
+        kind: hasMany
+        foreign_key: lesson_id
+
+  LessonVideo:
+    service: lesson
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      lesson:
+        target: Lesson
+        kind: belongsTo
+        local_key: lesson_id
+
+  LessonAttendance:
+    service: lesson
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      lesson:
+        target: Lesson
+        kind: belongsTo
+        local_key: lesson_id
+      student:
+        target: User
+        kind: belongsTo
+        local_key: student_id
+
+  Material:
+    service: material
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      owner:
+        target: User
+        kind: belongsTo
+        local_key: owner_teacher_id
+
+  Exam:
+    service: exam
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      owner:
+        target: User
+        kind: belongsTo
+        local_key: owner_teacher_id
+      questions:
+        target: Question
+        kind: hasMany
+        foreign_key: exam_id
+
+  ExamAssignment:
+    service: exam
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      exam:
+        target: Exam
+        kind: belongsTo
+        local_key: exam_id
+      class:
+        target: Class
+        kind: belongsTo
+        local_key: class_id
+
+  Question:
+    service: exam
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      exam:
+        target: Exam
+        kind: belongsTo
+        local_key: exam_id
+      choices:
+        target: QuestionChoice
+        kind: hasMany
+        foreign_key: question_id
+      answers:
+        target: QuestionAnswer
+        kind: hasMany
+        foreign_key: question_id
+
+  QuestionChoice:
+    service: exam
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      question:
+        target: Question
+        kind: belongsTo
+        local_key: question_id
+
+  QuestionAnswer:
+    service: exam
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+    relations:
+      question:
+        target: Question
+        kind: belongsTo
+        local_key: question_id
+
+  ExamAttempt:
+    service: submission
+    op_auth: { create: STUDENT, update: TEACHER, delete: TEACHER }
+    relations:
+      exam:
+        target: Exam
+        kind: belongsTo
+        local_key: exam_id
+      student:
+        target: User
+        kind: belongsTo
+        local_key: student_id
+      answers:
+        target: AttemptAnswer
+        kind: hasMany
+        foreign_key: attempt_id
+
+  AttemptAnswer:
+    service: submission
+    op_auth: { create: STUDENT, update: TEACHER, delete: TEACHER }
+    relations:
+      attempt:
+        target: ExamAttempt
+        kind: belongsTo
+        local_key: attempt_id
+      question:
+        target: Question
+        kind: belongsTo
+        local_key: question_id
+
+  Notification:
+    service: notification
+    op_auth: { create: TEACHER, update: ADMIN, delete: ADMIN }
+    relations:
+      user:
+        target: User
+        kind: belongsTo
+        local_key: user_id
+
+  CommunityReport:
+    service: notification
+    op_auth: { create: STUDENT, update: ADMIN, delete: ADMIN }
+    relations:
+      reporter:
+        target: User
+        kind: belongsTo
+        local_key: reporter_user_id
+
+  AuditLog:
+    service: audit
+    op_auth: { update: ADMIN, delete: ADMIN, list: ADMIN }
+    relations:
+      actor:
+        target: User
+        kind: belongsTo
+        local_key: actor_id
+
+
+  # Entities without relations — added for op_auth role gating.
+  RefreshToken:
+    service: user
+    op_auth: { create: ADMIN, update: ADMIN, delete: ADMIN, list: ADMIN, get: ADMIN }
+  PasswordReset:
+    service: user
+    op_auth: { create: ADMIN, update: ADMIN, delete: ADMIN, list: ADMIN, get: ADMIN }
+  ClassInviteKey:
+    service: class
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+  MaterialClass:
+    service: material
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+  MaterialTag:
+    service: material
+    op_auth: { create: TEACHER, update: TEACHER, delete: TEACHER }
+
+# runAction (dynamic action engine) — any authenticated viewer.
+action_auth: "*"

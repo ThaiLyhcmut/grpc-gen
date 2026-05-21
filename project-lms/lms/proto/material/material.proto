@@ -15,10 +15,12 @@ message Material {
   uint64 owner_teacher_id = 2;
   string title = 3;
   optional string description = 4;
-  string storage_key = 5;
-  string file_name = 6;
-  string file_type = 7;
-  int64 size_bytes = 8;
+  MaterialSourceType source_type = 17;
+  optional string url = 18;            // dùng khi source_type = SOURCE_URL
+  optional string storage_key = 5;     // dùng khi source_type = SOURCE_FILE
+  optional string file_name = 6;
+  optional string file_type = 7;
+  optional int64 size_bytes = 8;
   MaterialVisibility visibility = 9;
   optional CommunityStatus community_status = 10;
   optional string reject_reason = 11;
@@ -35,6 +37,13 @@ enum MaterialVisibility {
   MAT_COMMUNITY = 2;
 }
 
+// MaterialSourceType: tài liệu là link URL hay file upload.
+enum MaterialSourceType {
+  MATERIAL_SOURCE_UNSPECIFIED = 0;
+  SOURCE_URL = 1;
+  SOURCE_FILE = 2;
+}
+
 enum CommunityStatus {
   COMMUNITY_STATUS_UNSPECIFIED = 0;
   COMM_DRAFT = 1;
@@ -48,10 +57,12 @@ message CreateMaterialRequest {
   uint64 owner_teacher_id = 2;
   string title = 3;
   optional string description = 4;
-  string storage_key = 5;
-  string file_name = 6;
-  string file_type = 7;
-  int64 size_bytes = 8;
+  MaterialSourceType source_type = 14;
+  optional string url = 15;
+  optional string storage_key = 5;
+  optional string file_name = 6;
+  optional string file_type = 7;
+  optional int64 size_bytes = 8;
   MaterialVisibility visibility = 9;
   optional CommunityStatus community_status = 10;
   optional string reject_reason = 11;
@@ -68,6 +79,7 @@ message UpdateMaterialRequest {
   CommunityStatus community_status = 5;
   optional string reject_reason = 6;
   optional uint32 download_count = 7;
+  optional string url = 9;
   string updated_by = 8;
 }
 message UpdateMaterialResponse { repeated Material material = 1; int32 affected_count = 2; }

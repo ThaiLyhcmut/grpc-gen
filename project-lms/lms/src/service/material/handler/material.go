@@ -22,9 +22,15 @@ func scanMaterial(scanner interface{ Scan(...interface{}) error }) (*pb.Material
 	var entity pb.Material
 	var createdAt, updatedAt sql.NullTime
 	var createdBy, updatedBy sql.NullString
+	var SourceTypeStr string
 	var VisibilityStr string
 	var CommunityStatusStr string
 	var DescriptionNull sql.NullString
+	var UrlNull sql.NullString
+	var StorageKeyNull sql.NullString
+	var FileNameNull sql.NullString
+	var FileTypeNull sql.NullString
+	var SizeBytesNull sql.NullInt64
 	var RejectReasonNull sql.NullString
 
 	err := scanner.Scan(
@@ -32,10 +38,12 @@ func scanMaterial(scanner interface{ Scan(...interface{}) error }) (*pb.Material
 		&entity.OwnerTeacherId,
 		&entity.Title,
 		&DescriptionNull,
-		&entity.StorageKey,
-		&entity.FileName,
-		&entity.FileType,
-		&entity.SizeBytes,
+		&SourceTypeStr,
+		&UrlNull,
+		&StorageKeyNull,
+		&FileNameNull,
+		&FileTypeNull,
+		&SizeBytesNull,
 		&VisibilityStr,
 		&CommunityStatusStr,
 		&RejectReasonNull,
@@ -49,6 +57,16 @@ func scanMaterial(scanner interface{ Scan(...interface{}) error }) (*pb.Material
 		return nil, err
 	}
 
+	switch SourceTypeStr {
+	case "material_source_unspecified":
+		entity.SourceType = pb.MaterialSourceType_MATERIAL_SOURCE_UNSPECIFIED
+	case "source_url":
+		entity.SourceType = pb.MaterialSourceType_SOURCE_URL
+	case "source_file":
+		entity.SourceType = pb.MaterialSourceType_SOURCE_FILE
+	default:
+		entity.SourceType = pb.MaterialSourceType_MATERIAL_SOURCE_UNSPECIFIED
+	}
 	switch VisibilityStr {
 	case "material_visibility_unspecified":
 		entity.Visibility = pb.MaterialVisibility_MATERIAL_VISIBILITY_UNSPECIFIED
@@ -93,6 +111,26 @@ func scanMaterial(scanner interface{ Scan(...interface{}) error }) (*pb.Material
 		val := DescriptionNull.String
 		entity.Description = &val
 	}
+	if UrlNull.Valid {
+		val := UrlNull.String
+		entity.Url = &val
+	}
+	if StorageKeyNull.Valid {
+		val := StorageKeyNull.String
+		entity.StorageKey = &val
+	}
+	if FileNameNull.Valid {
+		val := FileNameNull.String
+		entity.FileName = &val
+	}
+	if FileTypeNull.Valid {
+		val := FileTypeNull.String
+		entity.FileType = &val
+	}
+	if SizeBytesNull.Valid {
+		val := SizeBytesNull.Int64
+		entity.SizeBytes = &val
+	}
 	if RejectReasonNull.Valid {
 		val := RejectReasonNull.String
 		entity.RejectReason = &val
@@ -134,15 +172,6 @@ func (h *Handler) CreateMaterial(ctx context.Context, req *pb.CreateMaterialRequ
 	if req.Title == "" {
 		return nil, status.Error(codes.InvalidArgument, "title is required")
 	}
-	if req.StorageKey == "" {
-		return nil, status.Error(codes.InvalidArgument, "storage_key is required")
-	}
-	if req.FileName == "" {
-		return nil, status.Error(codes.InvalidArgument, "file_name is required")
-	}
-	if req.FileType == "" {
-		return nil, status.Error(codes.InvalidArgument, "file_type is required")
-	}
 
 	// === ID handling ===
 
@@ -161,12 +190,50 @@ func (h *Handler) CreateMaterial(ctx context.Context, req *pb.CreateMaterialRequ
 	if req.Description != nil {
 		Description = *req.Description
 	}
+	// Optional string: Url
+	var Url interface{}
+	if req.Url != nil {
+		Url = *req.Url
+	}
+	// Optional string: StorageKey
+	var StorageKey interface{}
+	if req.StorageKey != nil {
+		StorageKey = *req.StorageKey
+	}
+	// Optional string: FileName
+	var FileName interface{}
+	if req.FileName != nil {
+		FileName = *req.FileName
+	}
+	// Optional string: FileType
+	var FileType interface{}
+	if req.FileType != nil {
+		FileType = *req.FileType
+	}
+	// Optional int64: SizeBytes
+	var SizeBytes interface{}
+	if req.SizeBytes != nil {
+		SizeBytes = *req.SizeBytes
+	}
 	// Optional string: RejectReason
 	var RejectReason interface{}
 	if req.RejectReason != nil {
 		RejectReason = *req.RejectReason
 	}
 
+	// Convert SourceType enum to string
+	SourceTypeValue := pb.MaterialSourceType_MATERIAL_SOURCE_UNSPECIFIED
+
+	SourceTypeValue = req.SourceType
+	SourceTypeStr := "material_source_unspecified"
+	switch SourceTypeValue {
+	case pb.MaterialSourceType_MATERIAL_SOURCE_UNSPECIFIED:
+		SourceTypeStr = "material_source_unspecified"
+	case pb.MaterialSourceType_SOURCE_URL:
+		SourceTypeStr = "source_url"
+	case pb.MaterialSourceType_SOURCE_FILE:
+		SourceTypeStr = "source_file"
+	}
 	// Convert Visibility enum to string
 	VisibilityValue := pb.MaterialVisibility_MATERIAL_VISIBILITY_UNSPECIFIED
 
@@ -203,8 +270,8 @@ func (h *Handler) CreateMaterial(ctx context.Context, req *pb.CreateMaterialRequ
 	createdBy := req.CreatedBy
 
 	query := `
-		INSERT INTO material (id, owner_teacher_id, title, description, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		INSERT INTO material (id, owner_teacher_id, title, description, source_type, url, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_by, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
 	`
 
 	result, err := h.execQuery(ctx, query,
@@ -212,10 +279,12 @@ func (h *Handler) CreateMaterial(ctx context.Context, req *pb.CreateMaterialRequ
 		req.OwnerTeacherId,
 		req.Title,
 		Description,
-		req.StorageKey,
-		req.FileName,
-		req.FileType,
-		req.SizeBytes,
+		SourceTypeStr,
+		Url,
+		StorageKey,
+		FileName,
+		FileType,
+		SizeBytes,
 		VisibilityStr,
 		CommunityStatusStr,
 		RejectReason,
@@ -241,7 +310,7 @@ func (h *Handler) CreateMaterial(ctx context.Context, req *pb.CreateMaterialRequ
 
 	// Inline SELECT to return the created entity (replaces previous h.GetMaterial call).
 	selectQuery := `
-		SELECT id, owner_teacher_id, title, description, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by
+		SELECT id, owner_teacher_id, title, description, source_type, url, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by
 		FROM material
 		WHERE id = ?
 	`
@@ -282,6 +351,12 @@ func (h *Handler) UpdateMaterial(ctx context.Context, req *pb.UpdateMaterialRequ
 	if req.Description != nil {
 		updateFields = append(updateFields, "description = ?")
 		args = append(args, *req.Description)
+
+	}
+	// Optional field: Url
+	if req.Url != nil {
+		updateFields = append(updateFields, "url = ?")
+		args = append(args, *req.Url)
 
 	}
 	// Optional field: Visibility
@@ -355,7 +430,7 @@ func (h *Handler) UpdateMaterial(ctx context.Context, req *pb.UpdateMaterialRequ
 	}
 
 	// SELECT back the updated rows so the client gets the current state.
-	selectQuery := fmt.Sprintf(`SELECT id, owner_teacher_id, title, description, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by FROM material %s`, whereClause)
+	selectQuery := fmt.Sprintf(`SELECT id, owner_teacher_id, title, description, source_type, url, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by FROM material %s`, whereClause)
 	rows, err := h.query(ctx, selectQuery, whereArgs...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to read back updated materials: %v", err)
@@ -456,7 +531,7 @@ func (h *Handler) ListMaterial(ctx context.Context, req *pb.ListMaterialRequest)
 
 	args = append(args, pageSize, offset)
 	query := fmt.Sprintf(`
-		SELECT id, owner_teacher_id, title, description, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by
+		SELECT id, owner_teacher_id, title, description, source_type, url, storage_key, file_name, file_type, size_bytes, visibility, community_status, reject_reason, download_count, created_at, updated_at, created_by, updated_by
 		FROM material
 		%s
 		ORDER BY %s %s

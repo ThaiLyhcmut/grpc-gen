@@ -27,6 +27,7 @@ func scanClassInviteKey(scanner interface{ Scan(...interface{}) error }) (*pb.Cl
 	var UsedAtTime sql.NullTime
 	var NoteNull sql.NullString
 	var UsedByStudentIdNull sql.NullInt64
+	var TargetStudentIdNull sql.NullInt64
 
 	err := scanner.Scan(
 		&entity.Id,
@@ -37,6 +38,7 @@ func scanClassInviteKey(scanner interface{ Scan(...interface{}) error }) (*pb.Cl
 		&ExpiresAtTime,
 		&UsedAtTime,
 		&UsedByStudentIdNull,
+		&TargetStudentIdNull,
 		&StatusStr,
 		&createdAt,
 		&updatedAt,
@@ -87,6 +89,10 @@ func scanClassInviteKey(scanner interface{ Scan(...interface{}) error }) (*pb.Cl
 	if UsedByStudentIdNull.Valid {
 		val := uint64(UsedByStudentIdNull.Int64)
 		entity.UsedByStudentId = &val
+	}
+	if TargetStudentIdNull.Valid {
+		val := uint64(TargetStudentIdNull.Int64)
+		entity.TargetStudentId = &val
 	}
 
 	return &entity, nil
@@ -158,6 +164,11 @@ func (h *Handler) CreateClassInviteKey(ctx context.Context, req *pb.CreateClassI
 	if req.UsedByStudentId != nil {
 		UsedByStudentId = *req.UsedByStudentId
 	}
+	// Optional uint64: TargetStudentId
+	var TargetStudentId interface{}
+	if req.TargetStudentId != nil {
+		TargetStudentId = *req.TargetStudentId
+	}
 
 	// Convert Status enum to string
 	StatusValue := pb.InviteKeyStatus_INVITE_KEY_STATUS_UNSPECIFIED
@@ -181,8 +192,8 @@ func (h *Handler) CreateClassInviteKey(ctx context.Context, req *pb.CreateClassI
 	createdBy := req.CreatedBy
 
 	query := `
-		INSERT INTO classinvitekey (id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, status, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		INSERT INTO classinvitekey (id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, target_student_id, status, created_by, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
 	`
 
 	result, err := h.execQuery(ctx, query,
@@ -194,6 +205,7 @@ func (h *Handler) CreateClassInviteKey(ctx context.Context, req *pb.CreateClassI
 		ExpiresAt,
 		UsedAt,
 		UsedByStudentId,
+		TargetStudentId,
 		StatusStr,
 		createdBy,
 	)
@@ -216,7 +228,7 @@ func (h *Handler) CreateClassInviteKey(ctx context.Context, req *pb.CreateClassI
 
 	// Inline SELECT to return the created entity (replaces previous h.GetClassInviteKey call).
 	selectQuery := `
-		SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, status, created_at, updated_at, created_by, updated_by
+		SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, target_student_id, status, created_at, updated_at, created_by, updated_by
 		FROM classinvitekey
 		WHERE id = ?
 	`
@@ -317,7 +329,7 @@ func (h *Handler) UpdateClassInviteKey(ctx context.Context, req *pb.UpdateClassI
 	}
 
 	// SELECT back the updated rows so the client gets the current state.
-	selectQuery := fmt.Sprintf(`SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, status, created_at, updated_at, created_by, updated_by FROM classinvitekey %s`, whereClause)
+	selectQuery := fmt.Sprintf(`SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, target_student_id, status, created_at, updated_at, created_by, updated_by FROM classinvitekey %s`, whereClause)
 	rows, err := h.query(ctx, selectQuery, whereArgs...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to read back updated classinvitekeys: %v", err)
@@ -418,7 +430,7 @@ func (h *Handler) ListClassInviteKey(ctx context.Context, req *pb.ListClassInvit
 
 	args = append(args, pageSize, offset)
 	query := fmt.Sprintf(`
-		SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, status, created_at, updated_at, created_by, updated_by
+		SELECT id, class_id, key_code, created_by_teacher_id, note, expires_at, used_at, used_by_student_id, target_student_id, status, created_at, updated_at, created_by, updated_by
 		FROM classinvitekey
 		%s
 		ORDER BY %s %s

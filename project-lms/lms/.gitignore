@@ -15,6 +15,11 @@ gen_skeleton
 /bin/
 /build/
 
+# LMS launcher runtime artifacts (scripts/run-lms.sh)
+/logs/
+/run/
+/.shared-ca/
+
 # IDE
 .idea/
 .vscode/

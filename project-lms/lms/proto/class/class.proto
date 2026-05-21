@@ -19,6 +19,7 @@ message Class {
   optional string cover_url = 6;
   ClassStatus status = 7;
   optional int32 max_students = 8;
+  ClassVisibility visibility = 13;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   optional string created_by = 11;
@@ -32,10 +33,19 @@ enum ClassStatus {
   ARCHIVED = 3;
 }
 
+// ClassVisibility: PUBLIC = học sinh tự ghi danh; PRIVATE = chỉ vào được khi
+// có lời mời đích danh (ClassInviteKey.target_student_id) của giáo viên.
+enum ClassVisibility {
+  CLASS_VISIBILITY_UNSPECIFIED = 0;
+  PUBLIC = 1;
+  PRIVATE = 2;
+}
+
 message CreateClassRequest {
   optional uint64 id = 1;
   uint64 teacher_id = 2;
   string name = 3;
+  ClassVisibility visibility = 13;
   optional string subject = 4;
   optional string description = 5;
   optional string cover_url = 6;
@@ -53,6 +63,7 @@ message UpdateClassRequest {
   optional string cover_url = 5;
   optional ClassStatus status = 6;
   optional int32 max_students = 7;
+  optional ClassVisibility visibility = 9;
   string updated_by = 8;
 }
 message UpdateClassResponse { repeated Class class = 1; int32 affected_count = 2; }
@@ -75,6 +86,7 @@ message ClassInviteKey {
   optional google.protobuf.Timestamp expires_at = 6;
   optional google.protobuf.Timestamp used_at = 7;
   optional uint64 used_by_student_id = 8;
+  optional uint64 target_student_id = 14;
   InviteKeyStatus status = 9;
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp updated_at = 11;
@@ -99,6 +111,7 @@ message CreateClassInviteKeyRequest {
   optional google.protobuf.Timestamp expires_at = 6;
   optional google.protobuf.Timestamp used_at = 7;
   optional uint64 used_by_student_id = 8;
+  optional uint64 target_student_id = 11;
   InviteKeyStatus status = 9;
   string created_by = 10;
 }

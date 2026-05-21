@@ -17,6 +17,8 @@ var MaterialFilterableFields = map[string]bool{
 	"owner_teacher_id": true,
 	"title":            true,
 	"description":      true,
+	"source_type":      true,
+	"url":              true,
 	"storage_key":      true,
 	"file_name":        true,
 	"file_type":        true,

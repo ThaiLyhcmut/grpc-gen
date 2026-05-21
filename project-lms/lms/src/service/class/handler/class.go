@@ -23,6 +23,7 @@ func scanClass(scanner interface{ Scan(...interface{}) error }) (*pb.Class, erro
 	var createdAt, updatedAt sql.NullTime
 	var createdBy, updatedBy sql.NullString
 	var StatusStr string
+	var VisibilityStr string
 	var SubjectNull sql.NullString
 	var DescriptionNull sql.NullString
 	var CoverUrlNull sql.NullString
@@ -37,6 +38,7 @@ func scanClass(scanner interface{ Scan(...interface{}) error }) (*pb.Class, erro
 		&CoverUrlNull,
 		&StatusStr,
 		&MaxStudentsNull,
+		&VisibilityStr,
 		&createdAt,
 		&updatedAt,
 		&createdBy,
@@ -57,6 +59,16 @@ func scanClass(scanner interface{ Scan(...interface{}) error }) (*pb.Class, erro
 		entity.Status = pb.ClassStatus_ARCHIVED
 	default:
 		entity.Status = pb.ClassStatus_CLASS_STATUS_UNSPECIFIED
+	}
+	switch VisibilityStr {
+	case "class_visibility_unspecified":
+		entity.Visibility = pb.ClassVisibility_CLASS_VISIBILITY_UNSPECIFIED
+	case "public":
+		entity.Visibility = pb.ClassVisibility_PUBLIC
+	case "private":
+		entity.Visibility = pb.ClassVisibility_PRIVATE
+	default:
+		entity.Visibility = pb.ClassVisibility_CLASS_VISIBILITY_UNSPECIFIED
 	}
 
 	if createdAt.Valid {
@@ -173,13 +185,26 @@ func (h *Handler) CreateClass(ctx context.Context, req *pb.CreateClassRequest) (
 	case pb.ClassStatus_ARCHIVED:
 		StatusStr = "archived"
 	}
+	// Convert Visibility enum to string
+	VisibilityValue := pb.ClassVisibility_CLASS_VISIBILITY_UNSPECIFIED
+
+	VisibilityValue = req.Visibility
+	VisibilityStr := "class_visibility_unspecified"
+	switch VisibilityValue {
+	case pb.ClassVisibility_CLASS_VISIBILITY_UNSPECIFIED:
+		VisibilityStr = "class_visibility_unspecified"
+	case pb.ClassVisibility_PUBLIC:
+		VisibilityStr = "public"
+	case pb.ClassVisibility_PRIVATE:
+		VisibilityStr = "private"
+	}
 
 	// Handle created_by field
 	createdBy := req.CreatedBy
 
 	query := `
-		INSERT INTO class (id, teacher_id, name, subject, description, cover_url, status, max_students, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		INSERT INTO class (id, teacher_id, name, subject, description, cover_url, status, max_students, visibility, created_by, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
 	`
 
 	result, err := h.execQuery(ctx, query,
@@ -191,6 +216,7 @@ func (h *Handler) CreateClass(ctx context.Context, req *pb.CreateClassRequest) (
 		CoverUrl,
 		StatusStr,
 		MaxStudents,
+		VisibilityStr,
 		createdBy,
 	)
 
@@ -212,7 +238,7 @@ func (h *Handler) CreateClass(ctx context.Context, req *pb.CreateClassRequest) (
 
 	// Inline SELECT to return the created entity (replaces previous h.GetClass call).
 	selectQuery := `
-		SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, created_at, updated_at, created_by, updated_by
+		SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, visibility, created_at, updated_at, created_by, updated_by
 		FROM class
 		WHERE id = ?
 	`
@@ -290,6 +316,21 @@ func (h *Handler) UpdateClass(ctx context.Context, req *pb.UpdateClassRequest) (
 		args = append(args, *req.MaxStudents)
 
 	}
+	// Optional field: Visibility
+	if req.Visibility != nil {
+		updateFields = append(updateFields, "visibility = ?")
+		VisibilityStr := "class_visibility_unspecified"
+		switch *req.Visibility {
+		case pb.ClassVisibility_CLASS_VISIBILITY_UNSPECIFIED:
+			VisibilityStr = "class_visibility_unspecified"
+		case pb.ClassVisibility_PUBLIC:
+			VisibilityStr = "public"
+		case pb.ClassVisibility_PRIVATE:
+			VisibilityStr = "private"
+		}
+		args = append(args, VisibilityStr)
+
+	}
 
 	if len(updateFields) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no fields to update")
@@ -317,7 +358,7 @@ func (h *Handler) UpdateClass(ctx context.Context, req *pb.UpdateClassRequest) (
 	}
 
 	// SELECT back the updated rows so the client gets the current state.
-	selectQuery := fmt.Sprintf(`SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, created_at, updated_at, created_by, updated_by FROM class %s`, whereClause)
+	selectQuery := fmt.Sprintf(`SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, visibility, created_at, updated_at, created_by, updated_by FROM class %s`, whereClause)
 	rows, err := h.query(ctx, selectQuery, whereArgs...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to read back updated classs: %v", err)
@@ -418,7 +459,7 @@ func (h *Handler) ListClass(ctx context.Context, req *pb.ListClassRequest) (*pb.
 
 	args = append(args, pageSize, offset)
 	query := fmt.Sprintf(`
-		SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, created_at, updated_at, created_by, updated_by
+		SELECT id, teacher_id, name, subject, description, cover_url, status, max_students, visibility, created_at, updated_at, created_by, updated_by
 		FROM class
 		%s
 		ORDER BY %s %s
