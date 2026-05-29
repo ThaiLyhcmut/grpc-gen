@@ -30,12 +30,14 @@ func GenerateDomain(in DomainGenInput) error {
 	// strings can't appear verbatim inside a backtick const.
 	subst := strings.NewReplacer("MODULE_PATH", in.ModulePath, "~BT~", "`")
 	files := map[string]string{
-		"store.go":       subst.Replace(domainStoreGo),
-		"interceptor.go": subst.Replace(domainInterceptorGo),
-		"engine.go":      subst.Replace(domainEngineGo),
-		"engine_test.go": subst.Replace(domainEngineTestGo),
-		"action.go":      subst.Replace(domainActionGo),
-		"registry.go":    renderDomainRegistry(in.Protos, in.ModulePath),
+		"store.go":          subst.Replace(domainStoreGo),
+		"interceptor.go":    subst.Replace(domainInterceptorGo),
+		"engine.go":         subst.Replace(domainEngineGo),
+		"engine_test.go":    subst.Replace(domainEngineTestGo),
+		"action.go":         subst.Replace(domainActionGo),
+		"system_context.go": subst.Replace(domainSystemContextGo),
+		"triggers.go":       subst.Replace(domainTriggersGo),
+		"registry.go":       renderDomainRegistry(in.Protos, in.ModulePath),
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(strings.TrimLeft(body, "\n")), 0644); err != nil {
@@ -307,6 +309,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -316,16 +319,161 @@ import (
 	commonpb "MODULE_PATH/proto/common"
 )
 
+// ViewerExtractor pulls the authenticated principal out of ctx into a plain
+// map that rules can reference as the ` + "`viewer`" + ` variable. Returning nil/empty is
+// fine — rules just see zero-valued fields.
+//
+// Decoupled from any concrete auth package so domain stays generator-pure;
+// main.go wires the real extractor (typically reading auth.FromContext).
+type ViewerExtractor func(ctx context.Context) map[string]any
+
+// EngineOption configures NewEngine. Add new knobs here without breaking
+// existing callers.
+type EngineOption func(*Engine)
+
+// WithViewerExtractor registers the function used to populate ` + "`env.viewer`" + ` for
+// every rule evaluation. Without this option, ` + "`viewer`" + ` is always the empty
+// principal — rules that gate on identity will deny everything.
+func WithViewerExtractor(fn ViewerExtractor) EngineOption {
+	return func(e *Engine) { e.viewer = fn }
+}
+
 // Engine evaluates business rules. It holds no rules itself — every rule is
 // read from the RuleStore (MongoDB) at request time.
 type Engine struct {
 	rules    *RuleStore
 	registry map[string]ListFunc
+	viewer   ViewerExtractor
+	scopes   *ReadScopeStore // optional RLS read-scope store (set via WithReadScopeStore)
 }
 
+// WithReadScopeStore plugs RLS into the engine so List ops can be filtered
+// per (entity, role). Without this, ScopeFiltersFor always returns nil and
+// no row-level filter is injected.
+func WithReadScopeStore(s *ReadScopeStore) EngineOption {
+	return func(e *Engine) { e.scopes = s }
+}
+
+// ScopeStore returns the configured scope store (may be nil).
+func (e *Engine) ScopeStore() *ReadScopeStore { return e.scopes }
+
 // NewEngine binds the rule store to the entity registry.
-func NewEngine(rules *RuleStore, registry map[string]ListFunc) *Engine {
-	return &Engine{rules: rules, registry: registry}
+func NewEngine(rules *RuleStore, registry map[string]ListFunc, opts ...EngineOption) *Engine {
+	e := &Engine{rules: rules, registry: registry}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
+// ScopeFiltersFor returns the RLS filters to AND-prepend to a List<Entity>
+// call's Search.Filters. Returns nil when:
+//   - no scope store / system-context / ADMIN role / no matching scope rule
+//
+// Each scope can have direct ` + "`filters`" + ` (with $viewer.id refs) or a multi-hop
+// ` + "`chain`" + `. The chain resolves sequentially: each step's results become $prev_ids
+// in the next; the last step's LocalField is the FK to inject on the target.
+// Fail-closed: empty chain result → sentinel ` + "`<local_field> EQUAL 0`" + ` → no rows.
+func (e *Engine) ScopeFiltersFor(ctx context.Context, entity string) []*commonpb.FilterCriteria {
+	if e == nil || e.scopes == nil || IsSystemContext(ctx) {
+		return nil
+	}
+	v := e.viewerFor(ctx)
+	role, _ := v["role"].(string)
+	if role == "" || role == "ADMIN" {
+		return nil
+	}
+	scopes := e.scopes.ForEntityRole(entity, role)
+	if len(scopes) == 0 {
+		return nil
+	}
+	env := map[string]any{"viewer": v, "now": time.Now().UTC().Format(time.RFC3339)}
+	out := []*commonpb.FilterCriteria{}
+	for _, sc := range scopes {
+		if !sc.Enabled {
+			continue
+		}
+		for _, f := range sc.Filters {
+			out = append(out, buildCriteria(f, env))
+		}
+		if len(sc.Chain) > 0 {
+			localField, ids, err := e.resolveChain(ctx, sc.Chain, env)
+			if err != nil {
+				log.Printf("scope chain %s/%s: %v (fail-closed)", sc.Entity, sc.ViewerRole, err)
+				ids = nil
+			}
+			if localField == "" {
+				continue
+			}
+			if len(ids) == 0 {
+				out = append(out, &commonpb.FilterCriteria{
+					Criteria: &commonpb.FilterCriteria_Condition{
+						Condition: &commonpb.FilterCondition{
+							Field: localField, Operator: commonpb.FilterOperator_EQUAL, Values: []string{"0"},
+						},
+					},
+				})
+				continue
+			}
+			out = append(out, &commonpb.FilterCriteria{
+				Criteria: &commonpb.FilterCriteria_Condition{
+					Condition: &commonpb.FilterCondition{
+						Field: localField, Operator: commonpb.FilterOperator_IN, Values: ids,
+					},
+				},
+			})
+		}
+	}
+	return out
+}
+
+// resolveChain walks scope chain steps with WithSystemContext to avoid
+// scope recursion on the engine's own internal fetches.
+func (e *Engine) resolveChain(ctx context.Context, chain []ChainStep, env map[string]any) (localField string, ids []string, err error) {
+	sysCtx := WithSystemContext(ctx)
+	for i, step := range chain {
+		lf, ok := e.registry[step.ViaEntity]
+		if !ok {
+			return "", nil, fmt.Errorf("chain step %d: unknown entity %q", i, step.ViaEntity)
+		}
+		rows, err := lf(sysCtx, buildSearch(step.ViaWhere, env))
+		if err != nil {
+			return "", nil, fmt.Errorf("chain step %d list %q: %w", i, step.ViaEntity, err)
+		}
+		ids = ids[:0]
+		for _, row := range rows {
+			val := row[step.ViaSelect]
+			if val == nil {
+				continue
+			}
+			s := fmt.Sprint(val)
+			if s == "" || s == "0" {
+				continue
+			}
+			ids = append(ids, s)
+		}
+		env["prev_ids"] = strings.Join(ids, ",")
+		if step.LocalField != "" {
+			localField = step.LocalField
+		}
+	}
+	return localField, ids, nil
+}
+
+// emptyViewer is the fallback when no extractor is registered or ctx has no
+// principal — gives expr-lang a non-nil map to traverse so ` + "`viewer.id`" + ` etc.
+// don't panic. Empty strings won't satisfy any identity-based rule.
+var emptyViewer = map[string]any{"id": "", "role": "", "email": ""}
+
+func (e *Engine) viewerFor(ctx context.Context) map[string]any {
+	if e.viewer == nil {
+		return emptyViewer
+	}
+	v := e.viewer(ctx)
+	if v == nil {
+		return emptyViewer
+	}
+	return v
 }
 
 // RuleError is returned when a rule's condition evaluates false — i.e. the
@@ -353,11 +501,13 @@ func (e *Engine) evalRules(ctx context.Context, rules []Rule, reqMap map[string]
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
+	// Rule fetch bypass RLS — rule cần "raw" view, không phụ thuộc viewer scope.
+	sysCtx := WithSystemContext(ctx)
 
 	for _, r := range rules {
 		// Each rule gets a fresh env: the request, the clock, and whatever
 		// its own fetch steps produce.
-		env := map[string]any{"req": reqMap, "now": now}
+		env := map[string]any{"req": reqMap, "now": now, "viewer": e.viewerFor(ctx)}
 
 		for _, fs := range r.Fetch {
 			lf, ok := e.registry[fs.Entity]
@@ -370,7 +520,7 @@ func (e *Engine) evalRules(ctx context.Context, rules []Rule, reqMap map[string]
 				// the request's own filters to this fetch.
 				search.Filters = append(append([]*commonpb.FilterCriteria{}, reqFilters...), search.Filters...)
 			}
-			rows, err := lf(ctx, search)
+			rows, err := lf(sysCtx, search)
 			if err != nil {
 				return fmt.Errorf("rule %q fetch %q: %w", r.Rule, fs.As, err)
 			}
@@ -590,6 +740,16 @@ func UnaryInterceptor(getEngine func() *Engine) grpc.UnaryClientInterceptor {
 		cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
 	) error {
 		op := method[strings.LastIndex(method, "/")+1:]
+		// List op: AND-prepend RLS scope filters via ScopeFiltersFor.
+		if strings.HasPrefix(op, "List") {
+			if eng := getEngine(); eng != nil {
+				entity := strings.TrimPrefix(op, "List")
+				if extra := eng.ScopeFiltersFor(ctx, entity); len(extra) > 0 {
+					injectScopeFilters(req, extra)
+				}
+			}
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
 		if !isMutation(op) {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
@@ -607,6 +767,37 @@ func UnaryInterceptor(getEngine func() *Engine) grpc.UnaryClientInterceptor {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 	}
+}
+
+// injectScopeFilters AND-prepends RLS filters into a List request's
+// Search.Filters via reflection. Works on any auto-generated
+// ListXxxRequest{ Search *SearchRequest }.
+func injectScopeFilters(req any, extra []*commonpb.FilterCriteria) {
+	rv := reflect.ValueOf(req)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return
+	}
+	sf := rv.FieldByName("Search")
+	if !sf.IsValid() {
+		return
+	}
+	if sf.Kind() == reflect.Pointer && sf.IsNil() {
+		if !sf.CanSet() {
+			return
+		}
+		sf.Set(reflect.New(sf.Type().Elem()))
+	}
+	sr, ok := sf.Interface().(*commonpb.SearchRequest)
+	if !ok || sr == nil {
+		return
+	}
+	sr.Filters = append(append([]*commonpb.FilterCriteria{}, extra...), sr.Filters...)
 }
 
 // extractFilters pulls the Filters field off an Update/Delete request via
@@ -933,11 +1124,37 @@ type Step struct {
 
 // Action is a custom multi-step operation stored in MongoDB. Output is an
 // optional expr-lang expression producing the result map.
+//
+// Triggers: when non-empty, action auto-runs AFTER each listed mutation op
+// succeeds (via TriggerInterceptor). Triggering request's protojson becomes
+// $input.* in the action env.
 type Action struct {
-	Name   string
-	Steps  []Step
-	Output string
+	Name     string
+	Triggers []string
+	Steps    []Step
+	Output   string
 }
+
+// ActionsForTrigger returns every action whose Triggers list contains op.
+// Used by TriggerInterceptor to auto-run actions after a matching write.
+func (s *ActionStore) ActionsForTrigger(op string) []Action {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Action
+	for _, a := range s.byName {
+		for _, t := range a.Triggers {
+			if t == op {
+				out = append(out, a)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// Store exposes the underlying ActionStore so callers (interceptor) can look
+// up triggered actions.
+func (a *ActionEngine) Store() *ActionStore { return a.store }
 
 // ActionStore loads actions from MongoDB.
 type ActionStore struct {
@@ -1030,7 +1247,8 @@ func (a *ActionEngine) Run(ctx context.Context, name string, input map[string]an
 			if !ok {
 				return nil, fmt.Errorf("action %q step %d: unknown entity %q", name, i, st.Entity)
 			}
-			rows, err := lf(ctx, buildSearch(st.Where, env))
+			// Action fetch bypass RLS — action runs as system, not as viewer.
+			rows, err := lf(WithSystemContext(ctx), buildSearch(st.Where, env))
 			if err != nil {
 				return nil, fmt.Errorf("action %q step %d fetch: %w", name, i, err)
 			}
@@ -1211,5 +1429,94 @@ func atoiSafe(s string) int {
 		return -1
 	}
 	return n
+}
+`
+
+// domainSystemContextGo — marker để wrap ctx khi engine làm internal fetch
+// (rule, action, scope chain), bypass RLS để tránh recursion + false-deny.
+const domainSystemContextGo = `
+// Code generated by grpc-gen. DO NOT EDIT.
+
+package domain
+
+import "context"
+
+type systemCtxKey struct{}
+
+// WithSystemContext returns a child context flagged as engine-internal.
+func WithSystemContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, systemCtxKey{}, true)
+}
+
+// IsSystemContext reports whether ctx came from an engine-internal call.
+func IsSystemContext(ctx context.Context) bool {
+	v, _ := ctx.Value(systemCtxKey{}).(bool)
+	return v
+}
+`
+
+// domainTriggersGo — interceptor cuối chain, sau khi mutation success thì
+// fan-out các action có Triggers chứa op name. Failure log loud, không
+// propagate (mutation đã commit downstream).
+const domainTriggersGo = `
+// Code generated by grpc-gen. DO NOT EDIT.
+
+package domain
+
+import (
+	"context"
+	"log"
+	"strings"
+
+	"google.golang.org/grpc"
+)
+
+// TriggerInterceptor runs actions registered with Triggers: [<op>] after a
+// matching write succeeds. getActionEngine is closure-deferred for the same
+// reason as UnaryInterceptor — the engine needs clients that themselves
+// route through this interceptor.
+func TriggerInterceptor(getActionEngine func() *ActionEngine) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context, method string, req, reply any,
+		cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
+	) error {
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		if err != nil {
+			return err
+		}
+		op := method[strings.LastIndex(method, "/")+1:]
+		if !isMutation(op) {
+			return nil
+		}
+		ae := getActionEngine()
+		if ae == nil {
+			return nil
+		}
+		acts := ae.Store().ActionsForTrigger(op)
+		if len(acts) == 0 {
+			return nil
+		}
+		input := mergeTriggerInput(messageToMap(req), messageToMap(reply))
+		sysCtx := WithSystemContext(ctx)
+		for _, a := range acts {
+			if _, runErr := ae.Run(sysCtx, a.Name, input); runErr != nil {
+				log.Printf("trigger %q on %s: %v (mutation already committed)", a.Name, op, runErr)
+			}
+		}
+		return nil
+	}
+}
+
+// mergeTriggerInput collapses request + response. Request fields take
+// precedence; response fields fall through so output IDs are referenceable.
+func mergeTriggerInput(req, resp map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range resp {
+		out[k] = v
+	}
+	for k, v := range req {
+		out[k] = v
+	}
+	return out
 }
 `

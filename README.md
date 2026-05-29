@@ -1,17 +1,39 @@
 # gRPC Generator
 
-A CLI tool to quickly scaffold gRPC microservices with full CRUD operations, similar to `create-react-app` for React.
+CLI để scaffold full-stack gRPC system: từ `.proto` → service handlers → GraphQL gateway → business-rule engine, một lệnh.
 
 ## Features
 
-✅ **Quick Project Setup** - Initialize a complete gRPC project structure in seconds
-✅ **Full CRUD Operations** - Auto-generate Create, Read, Update, Delete, List handlers
-✅ **Database Integration** - MySQL support with connection pooling
-✅ **Logger Support** - Function tracing and RPC logging
-✅ **Enum Support** - Automatic conversion between proto enums and database strings
-✅ **Optional Fields** - Proper handling of optional fields in Update operations
-✅ **Pagination & Filtering** - Built-in list operations with pagination and filters
-✅ **Docker Ready** - Dockerfile generated for each service
+### Tier 1 — Service scaffold (`add-service`)
+✅ Quick project init
+✅ Full CRUD (Create/Update/Delete/List) handlers từ proto entity
+✅ MySQL integration với connection pooling
+✅ Function tracing + RPC logging
+✅ Enum mapping proto ↔ DB strings
+✅ Optional field handling cho Update
+✅ Pagination + filter (whitelist annotation-driven)
+✅ Filter operators: EQUAL, IN, GREATER_THAN, BETWEEN, IS_NULL, ...
+✅ Dockerfile per service
+
+### Tier 2 — GraphQL gateway (`add-gateway`)
+✅ Auto-generate GraphQL schema từ proto + `gateway-config.yaml`
+✅ Resolvers + gRPC client wrappers + DataLoader (N+1 protection)
+✅ Per-entity `op_auth` + `field_auth` qua `@auth(role:)` directive
+✅ Nested relations (belongsTo / hasOne / hasMany)
+✅ gqlgen-backed, type-safe TypeScript codegen-friendly
+
+### Tier 3 — Dynamic business engine (auto-generated)
+✅ **Mongo-backed business rules** — `Create*`/`Update*`/`Delete*` chặn qua expr-lang condition, hot-reload
+✅ **Read-scope RLS** — auto AND-prepend filter trên `List*`, direct + multi-hop chain
+✅ **Action engine** — declarative fetch/compute/write pipeline (compute final grade, recompute totals, ...)
+✅ **Action triggers** — auto-run action sau mutation thành công (`Triggers: ["CreateXxx"]`)
+✅ **System context** — engine internal fetches bypass RLS để tránh recursion + false-deny
+✅ Fail-open trên engine error (rule store down ≠ block writes)
+✅ Fail-closed trên scope chain empty (sentinel `0` filter)
+
+→ **Add features bằng cách edit Mongo doc, không rebuild.** Cold edit chỉ khi đổi schema.
+
+📖 Doc chi tiết: [`docs/gateway.md`](docs/gateway.md)
 
 ## Installation
 

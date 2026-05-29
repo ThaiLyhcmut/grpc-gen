@@ -1,2 +1,19 @@
+# Build artifacts
+grpc-gen
+*.bin
 log/
 test/
+
+# Sample / downstream projects (live alongside the tool repo but are not part of it)
+project-*/
+
+# Editor / IDE / agent state
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
